@@ -7,16 +7,17 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'lzw'",
+            "name": "Debug unit tests in library 'lzw'",
             "cargo": {
                 "args": [
-                    "build",
-                    "--bin=lzw",
+                    "test",
+                    "--no-run",
+                    "--lib",
                     "--package=lzw"
                 ],
                 "filter": {
                     "name": "lzw",
-                    "kind": "bin"
+                    "kind": "lib"
                 }
             },
             "args": [],
@@ -25,17 +26,54 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'lzw'",
+            "name": "Debug example 'usage'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=usage",
+                    "--package=lzw"
+                ],
+                "filter": {
+                    "name": "usage",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'usage'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=lzw",
+                    "--example=usage",
                     "--package=lzw"
                 ],
                 "filter": {
-                    "name": "lzw",
-                    "kind": "bin"
+                    "name": "usage",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug benchmark 'lzw_bench'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bench=lzw_bench",
+                    "--package=lzw"
+                ],
+                "filter": {
+                    "name": "lzw_bench",
+                    "kind": "bench"
                 }
             },
             "args": [],

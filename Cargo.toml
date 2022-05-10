@@ -1,5 +1,5 @@
 [package]
-name = "lzw"
+name = "lzw-test"
 version = "0.1.0"
 edition = "2021"
 autobenches = false
@@ -7,10 +7,21 @@ autobenches = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 bitstream-io = "1.3"
+indexmap = "1.8"
+my-lzw = { path = "lzw" }
 
 [dev-dependencies]
 criterion = "0.3"
+lzw = "0.10"
+weezl = "0.1"
 
 [[bench]]
 name = "lzw_bench"
 harness = false
+
+[[bench]]
+name = "compare_lzw"
+harness = false
+
+[workspace]
+members = ["lzw"]

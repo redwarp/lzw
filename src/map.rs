@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
-use crate::{bytes_to_string, lzw::Lzw, string_to_bytes};
+use crate::{
+    bytes_to_string,
+    lzw::{LzwCompressor, LzwDecompressor},
+    string_to_bytes,
+};
 
 struct CompressionTable {
     entries: HashMap<Vec<u8>, u16>,
@@ -56,7 +60,7 @@ impl DecompressionTable {
 
 pub struct WithHashMap;
 
-impl Lzw for WithHashMap {
+impl LzwCompressor for WithHashMap {
     fn compress(bytes: &[u8], code_size: u8, possibilities: u16) -> Vec<u16> {
         let mut code_stream = vec![];
 
@@ -83,7 +87,9 @@ impl Lzw for WithHashMap {
 
         code_stream
     }
+}
 
+impl LzwDecompressor for WithHashMap {
     fn decompress(data: &[u16], code_size: u8, possibilities: u16) -> Vec<u8> {
         let mut char_stream: Vec<u8> = vec![];
         let mut string_table = DecompressionTable::new(code_size, possibilities);

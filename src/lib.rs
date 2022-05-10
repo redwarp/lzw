@@ -18,13 +18,43 @@ pub fn bytes_to_string(data: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{lzw::Lzw, map::WithHashMap};
+    use crate::{
+        lzw::{LzwCompressor, LzwDecompressor},
+        map::WithHashMap,
+        stack::{WithBigVec, WithMixHashVec},
+    };
+
+    const LOREM_IPSUM: &str = include_str!("../lorem_ipsum.txt");
 
     #[test]
     fn test_compress_decompress_with_hashmap() {
-        let original = "Just a simple ASCII string, without issues";
+        let original = LOREM_IPSUM;
 
         let compressed = WithHashMap::compress(original.as_bytes(), 12, 128);
+        let decoded = WithHashMap::decompress(&compressed, 12, 128);
+
+        let reverted = String::from_utf8_lossy(&decoded);
+
+        assert_eq!(original, reverted.as_ref());
+    }
+
+    #[test]
+    fn test_compress_table() {
+        let original = LOREM_IPSUM;
+
+        let compressed = WithBigVec::compress(original.as_bytes(), 12, 128);
+        let decoded = WithHashMap::decompress(&compressed, 12, 128);
+
+        let reverted = String::from_utf8_lossy(&decoded);
+
+        assert_eq!(original, reverted.as_ref());
+    }
+
+    #[test]
+    fn test_compress_mix() {
+        let original = LOREM_IPSUM;
+
+        let compressed = WithMixHashVec::compress(original.as_bytes(), 12, 128);
         let decoded = WithHashMap::decompress(&compressed, 12, 128);
 
         let reverted = String::from_utf8_lossy(&decoded);
