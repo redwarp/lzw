@@ -150,7 +150,7 @@ pub fn ascii_string() {
     let converted = original.as_bytes();
     println!("Converted: {converted:?}");
 
-    let stream = WithHashMap::compress(&converted, 12, 128);
+    let stream = WithHashMap::compress(converted, 12, 128);
     println!("Code stream {stream:?}");
 
     let decompressed_stream = WithHashMap::decompress(&stream, 12, 128);

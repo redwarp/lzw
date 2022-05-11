@@ -302,10 +302,6 @@ dependencies = [
 [[package]]
 name = "my-lzw"
 version = "0.1.0"
-dependencies = [
- "bitstream-io",
- "indexmap",
-]
 
 [[package]]
 name = "num-traits"
