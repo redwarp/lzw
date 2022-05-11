@@ -22,20 +22,14 @@ impl LzwCompressor for Stacked {
     fn compress(bytes: &[u8], code_size: u8, possibilities: u16) -> Vec<u16> {
         struct StringTable {
             words: IndexSet<Word>,
-            stack: Vec<u8>,
         }
 
         impl StringTable {
-            fn new(code_size: u8, possibilities: u16) -> Self {
+            fn new(_code_size: u8, possibilities: u16) -> Self {
                 let mut words = IndexSet::with_capacity(4096);
                 words.extend((0..possibilities).map(|i| Word::new(None, i as u8)));
-                let stack = Vec::with_capacity(4097);
 
-                Self { words, stack }
-            }
-
-            fn contains(&self, word: &Word) -> bool {
-                self.words.contains(word)
+                Self { words }
             }
 
             fn add(&mut self, word: Word) -> u16 {
@@ -46,23 +40,6 @@ impl LzwCompressor for Stacked {
 
             fn entry_of(&self, word: &Word) -> Option<u16> {
                 self.words.get_index_of(word).map(|index| index as u16)
-            }
-
-            fn push_to_stream(&mut self, code: u16, stream: &mut Vec<u16>) {
-                self.stack.clear();
-
-                let mut code = code;
-                loop {
-                    let word = &self.words[code as usize];
-                    self.stack.push(word.suffix);
-                    if let Some(prefix) = word.prefix {
-                        code = prefix;
-                    } else {
-                        break;
-                    }
-                }
-
-                for index in (0..self.stack.len()).rev() {}
             }
         }
 

@@ -39,7 +39,7 @@ pub fn compress_mylzw_crate(c: &mut Criterion) {
         b.iter(|| {
             let mut compressed = vec![];
             let mut encoder = my_lzw::Encoder::new(black_box(7), my_lzw::Endianness::LittleEndian);
-            encoder.encode(data, &mut compressed);
+            encoder.encode(data, &mut compressed).unwrap();
         })
     });
 }
@@ -47,7 +47,7 @@ pub fn compress_mylzw_crate(c: &mut Criterion) {
 pub fn compress_all_crates(c: &mut Criterion) {
     let data = load_data();
 
-    let mut group = c.benchmark_group("compression");
+    let mut group = c.benchmark_group("compression crates");
     group.bench_function("with crate lzw", |b| {
         b.iter(|| {
             let mut compressed = vec![];
@@ -68,7 +68,15 @@ pub fn compress_all_crates(c: &mut Criterion) {
         b.iter(|| {
             let mut compressed = vec![];
             let mut encoder = my_lzw::Encoder::new(black_box(7), my_lzw::Endianness::LittleEndian);
-            encoder.encode(data, &mut compressed);
+            encoder.encode(data, &mut compressed).unwrap();
+        })
+    });
+
+    group.bench_function("with tree implementation", |b| {
+        b.iter(|| {
+            let mut compressed = vec![];
+            let mut encoder = my_lzw::Encoder2::new(black_box(7), my_lzw::Endianness::LittleEndian);
+            encoder.encode(data, &mut compressed).unwrap();
         })
     });
 }

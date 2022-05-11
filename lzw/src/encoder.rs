@@ -53,13 +53,21 @@ impl Hash for Node {
     }
 }
 
-struct EncodeTable {
+trait EncodeTable {
+    fn add(&mut self, word: Node) -> u16;
+
+    fn index_of(&self, word: &Node) -> Option<u16>;
+
+    fn reset(&mut self);
+}
+
+struct EncodeTable1 {
     code_size: u8,
     current_index: u16,
     words: HashMap<Node, u16>,
 }
 
-impl EncodeTable {
+impl EncodeTable1 {
     fn new(code_size: u8) -> Self {
         let words: HashMap<Node, u16> =
             HashMap::with_capacity((1 << (code_size as usize + 2)).min(4096));
@@ -72,7 +80,9 @@ impl EncodeTable {
             current_index,
         }
     }
+}
 
+impl EncodeTable for EncodeTable1 {
     fn add(&mut self, word: Node) -> u16 {
         let index = self.current_index;
         self.words.insert(word, index);
@@ -80,7 +90,7 @@ impl EncodeTable {
         index
     }
 
-    fn entry_of(&self, word: &Node) -> Option<u16> {
+    fn index_of(&self, word: &Node) -> Option<u16> {
         match word {
             &Node::Root(index) => Some(index as u16),
             _ => self.words.get(word).cloned(),
@@ -91,14 +101,6 @@ impl EncodeTable {
         self.words.clear();
 
         self.current_index = (1 << self.code_size) + 2;
-    }
-
-    fn clear_code(&self) -> u16 {
-        1 << self.code_size
-    }
-
-    fn end_of_information(&self) -> u16 {
-        (1 << self.code_size) + 1
     }
 }
 
@@ -121,7 +123,9 @@ impl EncodeTable2 {
             current_index,
         }
     }
+}
 
+impl EncodeTable for EncodeTable2 {
     fn add(&mut self, word: Node) -> u16 {
         let index = self.current_index;
         self.words.insert(word.as_key(), index);
@@ -129,7 +133,7 @@ impl EncodeTable2 {
         index
     }
 
-    fn entry_of(&self, word: &Node) -> Option<u16> {
+    fn index_of(&self, word: &Node) -> Option<u16> {
         match word {
             &Node::Root(index) => Some(index as u16),
             _ => self.words.get(&word.as_key()).cloned(),
@@ -140,14 +144,6 @@ impl EncodeTable2 {
         self.words.clear();
 
         self.current_index = (1 << self.code_size) + 2;
-    }
-
-    fn clear_code(&self) -> u16 {
-        1 << self.code_size
-    }
-
-    fn end_of_information(&self) -> u16 {
-        (1 << self.code_size) + 1
     }
 }
 
@@ -174,7 +170,9 @@ impl EncodeTable3 {
             current_index,
         }
     }
+}
 
+impl EncodeTable for EncodeTable3 {
     fn add(&mut self, word: Node) -> u16 {
         match word {
             Node::Root(_) => panic!("Shouldn't add root"),
@@ -201,7 +199,7 @@ impl EncodeTable3 {
         }
     }
 
-    fn entry_of(&self, word: &Node) -> Option<u16> {
+    fn index_of(&self, word: &Node) -> Option<u16> {
         match *word {
             Node::Root(index) => Some(index as u16),
             Node::Word { prefix, suffix } => {
@@ -229,14 +227,6 @@ impl EncodeTable3 {
         self.words.resize(1 << (self.code_size + 1), Entry3::Blank);
         self.current_index = (1 << self.code_size) + 2;
     }
-
-    fn clear_code(&self) -> u16 {
-        1 << self.code_size
-    }
-
-    fn end_of_information(&self) -> u16 {
-        (1 << self.code_size) + 1
-    }
 }
 
 #[derive(Clone)]
@@ -263,7 +253,9 @@ impl EncodeTable4 {
             current_index,
         }
     }
+}
 
+impl EncodeTable for EncodeTable4 {
     fn add(&mut self, word: Node) -> u16 {
         match word {
             Node::Root(_) => panic!("Shouldn't add root"),
@@ -295,7 +287,7 @@ impl EncodeTable4 {
         }
     }
 
-    fn entry_of(&self, word: &Node) -> Option<u16> {
+    fn index_of(&self, word: &Node) -> Option<u16> {
         match *word {
             Node::Root(index) => Some(index as u16),
             Node::Word { prefix, suffix } => {
@@ -330,14 +322,6 @@ impl EncodeTable4 {
         self.words.resize((1 << self.code_size) + 2, Entry4::Blank);
         self.current_index = (1 << self.code_size) + 2;
     }
-
-    fn clear_code(&self) -> u16 {
-        1 << self.code_size
-    }
-
-    fn end_of_information(&self) -> u16 {
-        (1 << self.code_size) + 1
-    }
 }
 
 #[derive(Clone)]
@@ -367,7 +351,9 @@ impl EncodeTable5 {
             values,
         }
     }
+}
 
+impl EncodeTable for EncodeTable5 {
     fn add(&mut self, word: Node) -> u16 {
         match word {
             Node::Root(_) => panic!("Shouldn't add root"),
@@ -404,7 +390,7 @@ impl EncodeTable5 {
         }
     }
 
-    fn entry_of(&self, word: &Node) -> Option<u16> {
+    fn index_of(&self, word: &Node) -> Option<u16> {
         match *word {
             Node::Root(index) => Some(index as u16),
             Node::Word { prefix, suffix } => {
@@ -440,14 +426,6 @@ impl EncodeTable5 {
         self.words.resize(1 << (self.code_size + 1), Entry5::Blank);
         self.current_index = (1 << self.code_size) + 2;
     }
-
-    fn clear_code(&self) -> u16 {
-        1 << self.code_size
-    }
-
-    fn end_of_information(&self) -> u16 {
-        (1 << self.code_size) + 1
-    }
 }
 
 pub struct Encoder {
@@ -469,19 +447,21 @@ impl Encoder {
     pub fn encode<R: Read, W: Write>(&mut self, data: R, into: W) -> Result<(), std::io::Error> {
         let mut bit_writer = crate::writer::BitWriter::new(self.endianness, into);
         let mut code_size = self.code_size + 1;
+        let clear_code = 1 << self.code_size;
+        let end_of_information = (1 << self.code_size) + 1;
 
         let string_table = &mut self.string_table;
         string_table.reset();
 
         let mut current_prefix: Option<u16> = None;
 
-        bit_writer.write(code_size, string_table.clear_code())?;
+        bit_writer.write(code_size, clear_code)?;
 
         for k in data.bytes() {
             let k = k?;
             let word = Node::from(current_prefix, k);
 
-            if let Some(index) = string_table.entry_of(&word) {
+            if let Some(index) = string_table.index_of(&word) {
                 current_prefix = Some(index)
             } else {
                 let index_of_new_entry = string_table.add(word);
@@ -492,7 +472,7 @@ impl Encoder {
                     code_size += 1;
 
                     if code_size > 12 {
-                        bit_writer.write(12, string_table.clear_code())?;
+                        bit_writer.write(12, clear_code)?;
                         code_size = self.code_size + 1;
                         string_table.reset();
                     }
@@ -504,7 +484,185 @@ impl Encoder {
         if let Some(k) = current_prefix {
             bit_writer.write(code_size, k)?;
         }
-        bit_writer.write(code_size, string_table.end_of_information())?;
+        bit_writer.write(code_size, end_of_information)?;
+
+        bit_writer.fill()?;
+        bit_writer.flush()?;
+
+        Ok(())
+    }
+
+    pub fn encode_to_vec<R: Read>(&mut self, data: R) -> Result<Vec<u8>, std::io::Error> {
+        let mut output = vec![];
+        self.encode(data, &mut output)?;
+        Ok(output)
+    }
+}
+
+struct Tree {
+    nodes: Vec<TreeNode>,
+    code_size: u8,
+    current_index: u16,
+}
+
+impl Tree {
+    fn new(code_size: u8) -> Self {
+        let nodes = Vec::with_capacity(1 << (code_size + 1));
+        let current_index = 0;
+        Self {
+            nodes,
+            code_size,
+            current_index,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.nodes.clear();
+
+        self.nodes
+            .extend((0..1 << self.code_size).map(|_| TreeNode::root()));
+        self.nodes.push(TreeNode::root());
+        self.nodes.push(TreeNode::root());
+
+        self.current_index = (1 << self.code_size) + 2;
+    }
+
+    fn find_word(&self, prefix_index: usize, next_char: u8) -> Option<usize> {
+        let prefix = &self.nodes[prefix_index];
+        match &prefix.children {
+            Children::None => None,
+            Children::One(child_index, child_char) => {
+                if *child_char == next_char {
+                    Some(*child_index)
+                } else {
+                    None
+                }
+            }
+            Children::Some(child_indices) => {
+                let child_index = child_indices[next_char as usize];
+                if child_index != usize::MAX {
+                    Some(child_index)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    fn add(&mut self, prefix_index: usize, k: u8) -> usize {
+        let new_index = self.current_index as usize;
+
+        let new_node = TreeNode {
+            children: Children::None,
+        };
+        let old_node = self
+            .nodes
+            .get_mut(prefix_index)
+            .expect("Must be in the tree already");
+
+        match &mut old_node.children {
+            Children::None => {
+                old_node.children = Children::One(new_index, k);
+            }
+            Children::One(other_index, other_k) => {
+                let mut children = vec![usize::MAX; 1 << self.code_size];
+                children[*other_k as usize] = *other_index;
+                children[k as usize] = new_index;
+                old_node.children = Children::Some(children);
+            }
+            Children::Some(children) => {
+                children[k as usize] = new_index;
+            }
+        };
+        self.nodes.push(new_node);
+        self.current_index += 1;
+        new_index
+    }
+}
+
+struct TreeNode {
+    children: Children,
+}
+
+impl TreeNode {
+    fn root() -> Self {
+        Self {
+            children: Children::None,
+        }
+    }
+}
+
+enum Children {
+    None,
+    One(usize, u8),
+    Some(Vec<usize>),
+}
+
+pub struct Encoder2 {
+    code_size: u8,
+    string_table: Tree,
+    endianness: Endianness,
+}
+
+impl Encoder2 {
+    pub fn new(code_size: u8, endianness: Endianness) -> Self {
+        let encode_table = Tree::new(code_size);
+        Self {
+            code_size,
+            string_table: encode_table,
+            endianness,
+        }
+    }
+
+    pub fn encode<R: Read, W: Write>(&mut self, data: R, into: W) -> Result<(), std::io::Error> {
+        let mut bit_writer = crate::writer::BitWriter::new(self.endianness, into);
+        let mut code_size = self.code_size + 1;
+        let clear_code = 1 << self.code_size;
+        let end_of_information = (1 << self.code_size) + 1;
+
+        let tree = &mut self.string_table;
+        tree.reset();
+
+        bit_writer.write(code_size, clear_code)?;
+
+        let mut bytes = data.bytes();
+        let k = bytes.next();
+        if k.is_none() {
+            bit_writer.write(code_size, end_of_information)?;
+
+            bit_writer.fill()?;
+            bit_writer.flush()?;
+
+            return Ok(());
+        }
+        let k = k.unwrap()?;
+        let mut current_prefix = k as usize;
+
+        for k in bytes {
+            let k = k?;
+
+            if let Some(word) = tree.find_word(current_prefix, k) {
+                current_prefix = word;
+            } else {
+                let index_of_new_entry = tree.add(current_prefix, k);
+                let output_code = current_prefix as u16;
+                bit_writer.write(code_size, output_code)?;
+
+                if index_of_new_entry == 1 << code_size {
+                    code_size += 1;
+
+                    if code_size > 12 {
+                        bit_writer.write(12, clear_code)?;
+                        code_size = self.code_size + 1;
+                        tree.reset();
+                    }
+                }
+                current_prefix = k as usize;
+            }
+        }
+
+        bit_writer.write(code_size, current_prefix as u16)?;
+        bit_writer.write(code_size, end_of_information)?;
 
         bit_writer.fill()?;
         bit_writer.flush()?;
