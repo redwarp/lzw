@@ -520,25 +520,25 @@ impl Tree {
         self.nodes.clear();
 
         self.nodes
-            .extend((0..1 << self.code_size).map(|_| TreeNode::root()));
-        self.nodes.push(TreeNode::root());
-        self.nodes.push(TreeNode::root());
+            .extend((0..1 << self.code_size).map(|_| TreeNode::None));
+        self.nodes.push(TreeNode::None);
+        self.nodes.push(TreeNode::None);
 
         self.current_index = (1 << self.code_size) + 2;
     }
 
     fn find_word(&self, prefix_index: usize, next_char: u8) -> Option<usize> {
         let prefix = &self.nodes[prefix_index];
-        match &prefix.children {
-            Children::None => None,
-            Children::One(child_index, child_char) => {
+        match &prefix {
+            TreeNode::None => None,
+            TreeNode::One(child_index, child_char) => {
                 if *child_char == next_char {
                     Some(*child_index)
                 } else {
                     None
                 }
             }
-            Children::Some(child_indices) => {
+            TreeNode::Some(child_indices) => {
                 let child_index = child_indices[next_char as usize];
                 if child_index != usize::MAX {
                     Some(child_index)
@@ -552,47 +552,32 @@ impl Tree {
     fn add(&mut self, prefix_index: usize, k: u8) -> usize {
         let new_index = self.current_index as usize;
 
-        let new_node = TreeNode {
-            children: Children::None,
-        };
-        let old_node = self
+        let mut old_node = self
             .nodes
             .get_mut(prefix_index)
             .expect("Must be in the tree already");
 
-        match &mut old_node.children {
-            Children::None => {
-                old_node.children = Children::One(new_index, k);
+        match &mut old_node {
+            TreeNode::None => {
+                self.nodes[prefix_index] = TreeNode::One(new_index, k);
             }
-            Children::One(other_index, other_k) => {
+            TreeNode::One(other_index, other_k) => {
                 let mut children = vec![usize::MAX; 1 << self.code_size];
                 children[*other_k as usize] = *other_index;
                 children[k as usize] = new_index;
-                old_node.children = Children::Some(children);
+                self.nodes[prefix_index] = TreeNode::Some(children);
             }
-            Children::Some(children) => {
+            TreeNode::Some(children) => {
                 children[k as usize] = new_index;
             }
         };
-        self.nodes.push(new_node);
+        self.nodes.push(TreeNode::None);
         self.current_index += 1;
         new_index
     }
 }
 
-struct TreeNode {
-    children: Children,
-}
-
-impl TreeNode {
-    fn root() -> Self {
-        Self {
-            children: Children::None,
-        }
-    }
-}
-
-enum Children {
+enum TreeNode {
     None,
     One(usize, u8),
     Some(Vec<usize>),
@@ -606,10 +591,10 @@ pub struct Encoder2 {
 
 impl Encoder2 {
     pub fn new(code_size: u8, endianness: Endianness) -> Self {
-        let encode_table = Tree::new(code_size);
+        let string_table = Tree::new(code_size);
         Self {
             code_size,
-            string_table: encode_table,
+            string_table,
             endianness,
         }
     }
