@@ -499,39 +499,34 @@ impl Encoder {
     }
 }
 
+#[derive(Debug, Clone)]
+enum TreeNode {
+    None,
+    One(u8, u16),
+    Some(Vec<u16>),
+}
+
 struct Tree {
     nodes: Vec<TreeNode>,
     code_size: u8,
-    current_index: u16,
 }
 
 impl Tree {
     fn new(code_size: u8) -> Self {
         let nodes = Vec::with_capacity(1 << (code_size + 1));
-        let current_index = 0;
-        Self {
-            nodes,
-            code_size,
-            current_index,
-        }
+        Self { nodes, code_size }
     }
 
     fn reset(&mut self) {
         self.nodes.clear();
-
-        self.nodes
-            .extend((0..1 << self.code_size).map(|_| TreeNode::None));
-        self.nodes.push(TreeNode::None);
-        self.nodes.push(TreeNode::None);
-
-        self.current_index = (1 << self.code_size) + 2;
+        self.nodes.resize((1 << self.code_size) + 2, TreeNode::None);
     }
 
-    fn find_word(&self, prefix_index: usize, next_char: u8) -> Option<usize> {
-        let prefix = &self.nodes[prefix_index];
+    fn find_word(&self, prefix_index: u16, next_char: u8) -> Option<u16> {
+        let prefix = &self.nodes[prefix_index as usize];
         match prefix {
             TreeNode::None => None,
-            TreeNode::One(child_index, child_char) => {
+            TreeNode::One(child_char, child_index) => {
                 if *child_char == next_char {
                     Some(*child_index)
                 } else {
@@ -540,7 +535,7 @@ impl Tree {
             }
             TreeNode::Some(child_indices) => {
                 let child_index = child_indices[next_char as usize];
-                if child_index != usize::MAX {
+                if child_index != u16::MAX {
                     Some(child_index)
                 } else {
                     None
@@ -549,17 +544,18 @@ impl Tree {
         }
     }
 
-    fn add(&mut self, prefix_index: usize, k: u8) -> usize {
-        let new_index = self.current_index as usize;
+    fn add(&mut self, prefix_index: u16, k: u8) -> u16 {
+        let new_index = self.nodes.len() as u16;
+        let prefix_index = prefix_index as usize;
 
         let mut old_node = &mut self.nodes[prefix_index];
 
         match &mut old_node {
             TreeNode::None => {
-                self.nodes[prefix_index] = TreeNode::One(new_index, k);
+                self.nodes[prefix_index] = TreeNode::One(k, new_index);
             }
-            TreeNode::One(other_index, other_k) => {
-                let mut children = vec![usize::MAX; 1 << self.code_size];
+            TreeNode::One(other_k, other_index) => {
+                let mut children = vec![u16::MAX; 1 << self.code_size];
                 children[*other_k as usize] = *other_index;
                 children[k as usize] = new_index;
                 self.nodes[prefix_index] = TreeNode::Some(children);
@@ -569,15 +565,8 @@ impl Tree {
             }
         };
         self.nodes.push(TreeNode::None);
-        self.current_index += 1;
         new_index
     }
-}
-
-enum TreeNode {
-    None,
-    One(usize, u8),
-    Some(Vec<usize>),
 }
 
 pub struct Encoder2 {
@@ -618,7 +607,7 @@ impl Encoder2 {
             return Ok(());
         }
 
-        let mut current_prefix = k.unwrap()? as usize;
+        let mut current_prefix = k.unwrap()? as u16;
 
         for k in bytes {
             let k = k?;
@@ -627,7 +616,7 @@ impl Encoder2 {
                 current_prefix = word;
             } else {
                 let index_of_new_entry = tree.add(current_prefix, k);
-                let output_code = current_prefix as u16;
+                let output_code = current_prefix;
                 bit_writer.write(code_size, output_code)?;
 
                 if index_of_new_entry == 1 << code_size {
@@ -639,7 +628,7 @@ impl Encoder2 {
                         tree.reset();
                     }
                 }
-                current_prefix = k as usize;
+                current_prefix = k as u16;
             }
         }
 
