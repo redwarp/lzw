@@ -33,7 +33,7 @@ fn check_string_compression(string: &str) {
 }
 
 fn check_string_compression2(string: &str) {
-    let mut my_encoder = my_lzw::Encoder2::new(7, my_lzw::Endianness::LittleEndian);
+    let mut my_encoder = my_lzw::Encoder::new(7, my_lzw::Endianness::LittleEndian);
     let mut compressed = vec![];
     my_encoder
         .encode(string.as_bytes(), &mut compressed)

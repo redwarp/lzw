@@ -11,7 +11,7 @@ indexmap = "1.8"
 my-lzw = { path = "lzw" }
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = { version = "0.3", features = ["html_reports"] }
 lzw = "0.10"
 weezl = "0.1"
 
