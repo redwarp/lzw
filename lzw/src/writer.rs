@@ -85,7 +85,7 @@ where
 
             if free >= left {
                 let mask = (1 << left) - 1;
-                let bits = (data & mask) << free - left;
+                let bits = (data & mask) << (free - left);
                 self.current_byte |= bits as u8;
                 self.cursor += left as u8;
                 left = 0;

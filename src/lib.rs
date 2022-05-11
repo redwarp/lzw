@@ -6,11 +6,12 @@ pub mod stack;
 pub fn abcd_encode(text: &str) -> Vec<usize> {
     let mut code_stream = vec![];
     // Initialize the table, filling it with the possible values data can take
-    let mut string_table: Vec<String> = vec![];
-    string_table.push("A".to_string());
-    string_table.push("B".to_string());
-    string_table.push("C".to_string());
-    string_table.push("D".to_string());
+    let mut string_table: Vec<String> = vec![
+        "A".to_string(),
+        "B".to_string(),
+        "C".to_string(),
+        "D".to_string(),
+    ];
 
     let mut current_prefix: String = "".to_string();
 

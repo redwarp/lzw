@@ -7,10 +7,33 @@ const LOREM_IPSUM_LONG: &str = include_str!("../lorem_ipsum_long.txt");
 fn main() {
     check_string_compression(LOREM_IPSUM);
     check_string_compression(LOREM_IPSUM_LONG);
+    check_string_compression2(LOREM_IPSUM_LONG);
 }
 
 fn check_string_compression(string: &str) {
     let mut my_encoder = my_lzw::Encoder::new(7, my_lzw::Endianness::LittleEndian);
+    let mut compressed = vec![];
+    my_encoder
+        .encode(string.as_bytes(), &mut compressed)
+        .unwrap();
+
+    let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, 7);
+    let decompressed = decoder.decode(&compressed).unwrap();
+
+    let decompressed_string = String::from_utf8_lossy(&decompressed);
+
+    assert_eq!(decompressed_string, string);
+
+    let mut second_compression = vec![];
+    my_encoder
+        .encode(string.as_bytes(), &mut second_compression)
+        .unwrap();
+
+    assert_eq!(compressed, second_compression);
+}
+
+fn check_string_compression2(string: &str) {
+    let mut my_encoder = my_lzw::Encoder2::new(7, my_lzw::Endianness::LittleEndian);
     let mut compressed = vec![];
     my_encoder
         .encode(string.as_bytes(), &mut compressed)

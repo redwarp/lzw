@@ -529,7 +529,7 @@ impl Tree {
 
     fn find_word(&self, prefix_index: usize, next_char: u8) -> Option<usize> {
         let prefix = &self.nodes[prefix_index];
-        match &prefix {
+        match prefix {
             TreeNode::None => None,
             TreeNode::One(child_index, child_char) => {
                 if *child_char == next_char {
@@ -552,10 +552,7 @@ impl Tree {
     fn add(&mut self, prefix_index: usize, k: u8) -> usize {
         let new_index = self.current_index as usize;
 
-        let mut old_node = self
-            .nodes
-            .get_mut(prefix_index)
-            .expect("Must be in the tree already");
+        let mut old_node = &mut self.nodes[prefix_index];
 
         match &mut old_node {
             TreeNode::None => {
@@ -620,8 +617,8 @@ impl Encoder2 {
 
             return Ok(());
         }
-        let k = k.unwrap()?;
-        let mut current_prefix = k as usize;
+
+        let mut current_prefix = k.unwrap()? as usize;
 
         for k in bytes {
             let k = k?;
