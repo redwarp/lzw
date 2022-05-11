@@ -1,8 +1,5 @@
 use std::collections::HashMap;
 
-pub mod lzw;
-pub mod stack;
-
 pub fn abcd_encode(text: &str) -> Vec<usize> {
     let mut code_stream = vec![];
     // Initialize the table, filling it with the possible values data can take
@@ -162,6 +159,85 @@ impl Encoder for EncoderVersion2 {
     }
 }
 
+// Hashmap? We can use words!
+pub struct EncoderVersion3 {
+    code_size: u8,
+}
+
+impl Encoder for EncoderVersion3 {
+    fn new(code_size: u8) -> Self {
+        Self { code_size }
+    }
+
+    fn encode(&mut self, bytes: &[u8]) -> Vec<u16> {
+        #[derive(PartialEq, Eq, Hash)]
+        struct Word {
+            prefix: Option<u16>,
+            suffix: u8,
+        }
+
+        struct CompressionTable {
+            entries: HashMap<Word, u16>,
+        }
+
+        impl CompressionTable {
+            fn new(code_size: u8) -> Self {
+                let entries: HashMap<_, _> = (0..1 << code_size)
+                    .map(|i| {
+                        (
+                            Word {
+                                prefix: None,
+                                suffix: i as u8,
+                            },
+                            i as u16,
+                        )
+                    })
+                    .collect();
+
+                Self { entries }
+            }
+
+            fn code_for(&self, string: &Word) -> Option<u16> {
+                self.entries.get(string).map(|index| *index)
+            }
+
+            fn add(&mut self, entry: Word) {
+                self.entries.insert(entry, self.entries.len() as u16);
+            }
+        }
+
+        let mut code_stream = vec![];
+
+        let mut string_table = CompressionTable::new(self.code_size);
+        let mut current_prefix: Option<u16> = None;
+
+        for &k in bytes {
+            let current_string = Word {
+                prefix: current_prefix,
+                suffix: k,
+            };
+
+            if let Some(code_for_current_string) = string_table.code_for(&current_string) {
+                current_prefix = Some(code_for_current_string);
+            } else {
+                string_table.add(current_string);
+                code_stream.push(
+                    current_prefix.expect(
+                        "There will be a prefix, as all prefixless entries are in the table",
+                    ),
+                );
+                current_prefix = Some(k as u16);
+            }
+        }
+
+        if let Some(prefix) = current_prefix {
+            code_stream.push(prefix);
+        }
+
+        code_stream
+    }
+}
+
 pub fn compress<E: Encoder>(data: &[u8], code_size: u8) -> Vec<u16> {
     let mut encoder = E::new(code_size);
 
@@ -170,7 +246,7 @@ pub fn compress<E: Encoder>(data: &[u8], code_size: u8) -> Vec<u16> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{abcd_encode, compress, EncoderVersion1, EncoderVersion2};
+    use crate::{abcd_encode, compress, EncoderVersion1, EncoderVersion2, EncoderVersion3};
     const DATA: &[u8; 40] = &[
         1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2,
         1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
@@ -182,7 +258,7 @@ mod tests {
 
         let compressed = abcd_encode(text);
 
-        assert_eq!(compressed, [0, 0, 1, 1, 5, 2, 4, 3, 3, 4, 1]);
+        assert_eq!(compressed, [0, 1, 0, 2, 4, 0, 3, 9, 4, 1, 13, 13]);
     }
 
     #[test]
@@ -198,6 +274,15 @@ mod tests {
     #[test]
     fn encoder_version2() {
         let compressed = compress::<EncoderVersion2>(DATA, 2);
+        assert_eq!(
+            compressed,
+            [1, 4, 4, 2, 7, 7, 5, 6, 8, 2, 10, 1, 12, 13, 4, 0, 19, 0, 8]
+        )
+    }
+
+    #[test]
+    fn encoder_version3() {
+        let compressed = compress::<EncoderVersion3>(DATA, 2);
         assert_eq!(
             compressed,
             [1, 4, 4, 2, 7, 7, 5, 6, 8, 2, 10, 1, 12, 13, 4, 0, 19, 0, 8]
