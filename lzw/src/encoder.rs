@@ -506,6 +506,8 @@ enum TreeNode {
     Some(Vec<u16>),
 }
 
+/// Inspired by trie: https://en.wikipedia.org/wiki/Trie
+/// Using this suggestion: https://dev.to/deciduously/no-more-tears-no-more-knots-arena-allocated-trees-in-rust-44k6
 struct Tree {
     nodes: Vec<TreeNode>,
     code_size: u8,
