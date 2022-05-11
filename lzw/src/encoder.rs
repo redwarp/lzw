@@ -618,8 +618,8 @@ impl Encoder2 {
                 current_prefix = word;
             } else {
                 let index_of_new_entry = tree.add(current_prefix, k);
-                let output_code = current_prefix;
-                bit_writer.write(code_size, output_code)?;
+                bit_writer.write(code_size, current_prefix)?;
+                current_prefix = k as u16;
 
                 if index_of_new_entry == 1 << code_size {
                     code_size += 1;
@@ -630,7 +630,6 @@ impl Encoder2 {
                         tree.reset();
                     }
                 }
-                current_prefix = k as u16;
             }
         }
 
