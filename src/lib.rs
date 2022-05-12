@@ -198,7 +198,7 @@ impl Encoder for EncoderVersion3 {
             }
 
             fn code_for(&self, string: &Word) -> Option<u16> {
-                self.entries.get(string).map(|index| *index)
+                self.entries.get(string).copied()
             }
 
             fn add(&mut self, entry: Word) {
