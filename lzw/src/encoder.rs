@@ -104,6 +104,7 @@ impl Encoder {
         let mut bytes = data.bytes();
         let k = bytes.next();
         if k.is_none() {
+            // Well, it's an empty stream! Leaving early.
             bit_writer.write(code_size, end_of_information)?;
 
             bit_writer.fill()?;
