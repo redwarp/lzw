@@ -1,6 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use lzw_test::{
     compress, EncoderVersion1, EncoderVersion2, EncoderVersion3, EncoderVersion4, EncoderVersion5,
+    EncoderVersion6,
 };
 
 const LOREM_IPSUM: &[u8] = include_str!("../lorem_ipsum.txt").as_bytes();
@@ -21,6 +22,9 @@ pub fn compression_evolution(c: &mut Criterion) {
     });
     group.bench_function("version 5: Using a simplified tree", |b| {
         b.iter(|| compress::<EncoderVersion5>(LOREM_IPSUM, black_box(7)));
+    });
+    group.bench_function("version 6: Tree with optimized leaves", |b| {
+        b.iter(|| compress::<EncoderVersion6>(LOREM_IPSUM, black_box(7)));
     });
 }
 

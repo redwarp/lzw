@@ -3,16 +3,16 @@ use std::io::{Read, Write};
 use crate::Endianness;
 
 #[derive(Debug, Clone)]
-enum TreeNode {
-    None,
-    One(u8, u16),
-    Some(Vec<u16>),
+enum Node {
+    NoChild,
+    OneChild(u8, u16),
+    ManyChildren(Vec<u16>),
 }
 
 /// Inspired by trie: https://en.wikipedia.org/wiki/Trie
 /// Using this suggestion: https://dev.to/deciduously/no-more-tears-no-more-knots-arena-allocated-trees-in-rust-44k6
 struct Tree {
-    nodes: Vec<TreeNode>,
+    nodes: Vec<Node>,
     code_size: u8,
 }
 
@@ -24,21 +24,21 @@ impl Tree {
 
     fn reset(&mut self) {
         self.nodes.clear();
-        self.nodes.resize((1 << self.code_size) + 2, TreeNode::None);
+        self.nodes.resize((1 << self.code_size) + 2, Node::NoChild);
     }
 
     fn find_word(&self, prefix_index: u16, next_char: u8) -> Option<u16> {
         let prefix = &self.nodes[prefix_index as usize];
         match prefix {
-            TreeNode::None => None,
-            TreeNode::One(child_char, child_index) => {
+            Node::NoChild => None,
+            Node::OneChild(child_char, child_index) => {
                 if *child_char == next_char {
                     Some(*child_index)
                 } else {
                     None
                 }
             }
-            TreeNode::Some(child_indices) => {
+            Node::ManyChildren(child_indices) => {
                 let child_index = child_indices[next_char as usize];
                 if child_index != u16::MAX {
                     Some(child_index)
@@ -56,20 +56,20 @@ impl Tree {
         let mut old_node = &mut self.nodes[prefix_index];
 
         match &mut old_node {
-            TreeNode::None => {
-                self.nodes[prefix_index] = TreeNode::One(k, new_index);
+            Node::NoChild => {
+                self.nodes[prefix_index] = Node::OneChild(k, new_index);
             }
-            TreeNode::One(other_k, other_index) => {
+            Node::OneChild(other_k, other_index) => {
                 let mut children = vec![u16::MAX; 1 << self.code_size];
                 children[*other_k as usize] = *other_index;
                 children[k as usize] = new_index;
-                self.nodes[prefix_index] = TreeNode::Some(children);
+                self.nodes[prefix_index] = Node::ManyChildren(children);
             }
-            TreeNode::Some(children) => {
+            Node::ManyChildren(children) => {
                 children[k as usize] = new_index;
             }
         };
-        self.nodes.push(TreeNode::None);
+        self.nodes.push(Node::NoChild);
         new_index
     }
 }

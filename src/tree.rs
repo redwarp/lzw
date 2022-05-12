@@ -58,12 +58,17 @@ impl Tree {
             *entry += 1;
         }
 
+        let total_node_count: u32 = node_counts.values().sum();
         let mut keys: Vec<_> = node_counts.keys().collect();
         keys.sort();
 
+        println!("Total nodes: {total_node_count}");
         for key in keys {
             let value = node_counts[key];
-            println!("Nodes with {key} children: {value}");
+            println!(
+                "Nodes with {key} children: {value} ({percent}% of total nodes)",
+                percent = (value as f32 / total_node_count as f32 * 100.0)
+            );
         }
     }
 }
@@ -116,10 +121,20 @@ mod tests {
     use super::TreeEncoder;
 
     #[test]
-    fn debug_tree() {
+    fn debug_tree_lorem() {
         let data = include_str!("../lorem_ipsum.txt").as_bytes();
 
         let mut encoder = TreeEncoder::new(7);
+        encoder.encode(data);
+
+        encoder.print_tree_content();
+    }
+
+    #[test]
+    fn debug_tree_sunflower() {
+        let data = include_bytes!("../sunflower.bmp");
+
+        let mut encoder = TreeEncoder::new(8);
         encoder.encode(data);
 
         encoder.print_tree_content();

@@ -9,7 +9,7 @@ where
     endianness: Endianness,
     write: W,
     cursor: u8,
-    current_byte: u8,
+    byte_buffer: u32,
 }
 
 impl<W> BitWriter<W>
@@ -17,27 +17,31 @@ where
     W: Write,
 {
     pub fn new(endianness: Endianness, write: W) -> Self {
+        let byte_buffer = 0;
         let cursor = 0;
-        let current_byte = 0;
         Self {
             endianness,
             write,
+            byte_buffer,
             cursor,
-            current_byte,
         }
     }
 
     pub fn write(&mut self, amount: u8, data: u16) -> Result<(), std::io::Error> {
         match self.endianness {
+            Endianness::BigEndian => self.write_big_endian2(amount, data),
             Endianness::LittleEndian => self.write_little_endian(amount, data),
-            Endianness::BigEndian => self.write_big_endian(amount, data),
         }
     }
 
     pub fn fill(&mut self) -> Result<(), std::io::Error> {
         if self.cursor > 0 {
-            self.write.write_all(&[self.current_byte])?;
-            self.current_byte = 0;
+            match self.endianness {
+                Endianness::BigEndian => self.write.write_all(&[(self.byte_buffer >> 24) as u8])?,
+                Endianness::LittleEndian => self.write.write_all(&[self.byte_buffer as u8])?,
+            }
+
+            self.byte_buffer = 0;
             self.cursor = 0;
         }
 
@@ -49,60 +53,35 @@ where
     }
 
     fn write_little_endian(&mut self, amount: u8, data: u16) -> Result<(), std::io::Error> {
-        let mut left = amount;
-        let mut data = data;
-        while left > 0 {
-            let free: u8 = 8 - self.cursor;
+        let mask = (1 << amount) - 1;
+        self.byte_buffer |= (data as u32 & mask) << self.cursor;
+        self.cursor += amount;
 
-            if free >= left {
-                let mask = (1 << left) - 1;
-                let bits = (data & mask) << self.cursor;
-                self.current_byte |= bits as u8;
-                self.cursor += left as u8;
-                left = 0;
-            } else {
-                let mask = (1 << free) - 1;
-                let bits = (data & mask) << self.cursor;
-                self.current_byte |= bits as u8;
-                self.cursor += free;
-                data >>= free;
-                left -= free;
-            }
+        while self.cursor >= 8 {
+            let byte = self.byte_buffer as u8;
+            self.byte_buffer >>= 8;
+            self.cursor -= 8;
 
-            if self.cursor == 8 {
-                self.write.write_all(&[self.current_byte])?;
-                self.current_byte = 0;
-                self.cursor = 0;
-            }
+            self.write.write_all(&[byte])?;
         }
+
         Ok(())
     }
 
-    fn write_big_endian(&mut self, amount: u8, data: u16) -> Result<(), std::io::Error> {
-        let mut left = amount;
-        while left > 0 {
-            let free: u8 = 8 - self.cursor;
+    fn write_big_endian2(&mut self, amount: u8, data: u16) -> Result<(), std::io::Error> {
+        let mask = (1 << amount) - 1;
+        let shift = 32 - amount - self.cursor;
+        self.byte_buffer |= (data as u32 & mask) << shift;
+        self.cursor += amount;
 
-            if free >= left {
-                let mask = (1 << left) - 1;
-                let bits = (data & mask) << (free - left);
-                self.current_byte |= bits as u8;
-                self.cursor += left as u8;
-                left = 0;
-            } else {
-                let mask = ((1 << free) - 1) << (left - free);
-                let bits = (data & mask) >> (left - free);
-                self.current_byte |= bits as u8;
-                self.cursor += free;
-                left -= free;
-            }
+        while self.cursor >= 8 {
+            let byte = (self.byte_buffer >> 24) as u8;
+            self.byte_buffer <<= 8;
+            self.cursor -= 8;
 
-            if self.cursor == 8 {
-                self.write.write_all(&[self.current_byte])?;
-                self.current_byte = 0;
-                self.cursor = 0;
-            }
+            self.write.write_all(&[byte])?;
         }
+
         Ok(())
     }
 }
@@ -155,6 +134,20 @@ mod tests {
     }
 
     #[test]
+    fn write_0xfa_little_endian() -> Result<(), std::io::Error> {
+        let mut output = vec![];
+
+        let mut writer = BitWriter::new(Endianness::LittleEndian, &mut output);
+
+        writer.write(16, 0xfffa)?;
+        writer.fill()?;
+
+        assert_eq!(output, [0xfa, 0xff]);
+
+        Ok(())
+    }
+
+    #[test]
     fn write_1_big_endian() -> Result<(), std::io::Error> {
         let mut output = vec![];
 
@@ -193,6 +186,20 @@ mod tests {
         writer.fill()?;
 
         assert_eq!(output, [0xff, 0xf0]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn write_0xfa_big_endian() -> Result<(), std::io::Error> {
+        let mut output = vec![];
+
+        let mut writer = BitWriter::new(Endianness::BigEndian, &mut output);
+
+        writer.write(16, 0xfffa)?;
+        writer.fill()?;
+
+        assert_eq!(output, [0xff, 0xfa]);
 
         Ok(())
     }

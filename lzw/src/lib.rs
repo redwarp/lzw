@@ -45,4 +45,14 @@ mod tests {
 
         assert_eq!(compression1, compression2);
     }
+
+    #[test]
+    fn encode_lorem_ipsum() {
+        let data = include_str!("../../lorem_ipsum.txt").as_bytes();
+
+        let mut encoder = Encoder::new(7, Endianness::LittleEndian);
+
+        let mut compressed = vec![];
+        encoder.encode(&data[..], &mut compressed).unwrap();
+    }
 }
