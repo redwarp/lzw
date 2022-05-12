@@ -1,13 +1,13 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use lzw_test::{
+use lzw_exploration::{
     compress, EncoderVersion1, EncoderVersion2, EncoderVersion3, EncoderVersion4, EncoderVersion5,
     EncoderVersion6,
 };
 
-const LOREM_IPSUM: &[u8] = include_str!("../lorem_ipsum.txt").as_bytes();
+const LOREM_IPSUM: &[u8] = include_str!("../../test-assets/lorem_ipsum.txt").as_bytes();
 
 pub fn compression_evolution(c: &mut Criterion) {
-    let mut group = c.benchmark_group("compression evolution");
+    let mut group = c.benchmark_group("encoding evolution");
     group.bench_function("version 1: A giant vec of vecs", |b| {
         b.iter(|| compress::<EncoderVersion1>(LOREM_IPSUM, black_box(7)));
     });

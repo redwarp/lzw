@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn debug_tree_lorem() {
-        let data = include_str!("../lorem_ipsum.txt").as_bytes();
+        let data = include_str!("../../test-assets/lorem_ipsum.txt").as_bytes();
 
         let mut encoder = TreeEncoder::new(7);
         encoder.encode(data);
@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn debug_tree_sunflower() {
-        let data = include_bytes!("../sunflower.bmp");
+        let data = include_bytes!("../../test-assets/sunflower.bmp");
 
         let mut encoder = TreeEncoder::new(8);
         encoder.encode(data);

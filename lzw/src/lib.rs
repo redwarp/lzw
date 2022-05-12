@@ -48,7 +48,7 @@ mod tests {
 
     #[test]
     fn encode_lorem_ipsum() {
-        let data = include_str!("../../lorem_ipsum.txt").as_bytes();
+        let data = include_str!("../../test-assets/lorem_ipsum.txt").as_bytes();
 
         let mut encoder = Encoder::new(7, Endianness::LittleEndian);
 

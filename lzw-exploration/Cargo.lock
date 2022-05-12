@@ -179,10 +179,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
-name = "fast-lzw"
-version = "0.1.0"
-
-[[package]]
 name = "half"
 version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -259,8 +255,8 @@ name = "lzw-exploration"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "fast-lzw",
  "lzw",
+ "my-lzw",
  "weezl",
 ]
 
@@ -278,6 +274,10 @@ checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "my-lzw"
+version = "0.1.0"
 
 [[package]]
 name = "num-traits"
