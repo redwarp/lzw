@@ -238,6 +238,93 @@ impl Encoder for EncoderVersion3 {
     }
 }
 
+// Let's build a tree!
+#[derive(Clone)]
+struct SimpleTreeNode {
+    childrens: Vec<u16>,
+}
+
+impl SimpleTreeNode {
+    fn new(code_size: u8) -> Self {
+        let children = vec![u16::MAX; 1 << code_size];
+        Self {
+            childrens: children,
+        }
+    }
+}
+
+struct SimpleTree {
+    nodes: Vec<SimpleTreeNode>,
+    code_size: u8,
+}
+
+impl SimpleTree {
+    fn new(code_size: u8) -> Self {
+        let mut nodes = Vec::with_capacity(1 << (code_size + 1));
+        nodes.resize(1 << code_size, SimpleTreeNode::new(code_size));
+
+        Self { nodes, code_size }
+    }
+
+    fn find_word(&self, prefix_index: Option<u16>, next_char: u8) -> Option<u16> {
+        match prefix_index {
+            Some(prefix_index) => {
+                let prefix = &self.nodes[prefix_index as usize];
+                let child_index = prefix.childrens[next_char as usize];
+                if child_index != u16::MAX {
+                    Some(child_index)
+                } else {
+                    None
+                }
+            }
+            None => Some(next_char as u16),
+        }
+    }
+
+    fn add(&mut self, prefix_index: u16, k: u8) {
+        self.nodes[prefix_index as usize].childrens[k as usize] = self.nodes.len() as u16;
+
+        self.nodes.push(SimpleTreeNode::new(self.code_size));
+    }
+}
+
+pub struct EncoderVersion4 {
+    code_size: u8,
+}
+
+impl Encoder for EncoderVersion4 {
+    fn new(code_size: u8) -> Self {
+        Self { code_size }
+    }
+
+    fn encode(&mut self, bytes: &[u8]) -> Vec<u16> {
+        let mut code_stream = vec![];
+
+        let mut string_table = SimpleTree::new(self.code_size);
+        let mut current_prefix: Option<u16> = None;
+
+        for &k in bytes {
+            if let Some(code_for_current_string) = string_table.find_word(current_prefix, k) {
+                current_prefix = Some(code_for_current_string);
+            } else {
+                string_table.add(current_prefix.unwrap(), k);
+                code_stream.push(
+                    current_prefix.expect(
+                        "There will be a prefix, as all prefixless entries are in the table",
+                    ),
+                );
+                current_prefix = Some(k as u16);
+            }
+        }
+
+        if let Some(prefix) = current_prefix {
+            code_stream.push(prefix);
+        }
+
+        code_stream
+    }
+}
+
 pub fn compress<E: Encoder>(data: &[u8], code_size: u8) -> Vec<u16> {
     let mut encoder = E::new(code_size);
 
@@ -246,7 +333,9 @@ pub fn compress<E: Encoder>(data: &[u8], code_size: u8) -> Vec<u16> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{abcd_encode, compress, EncoderVersion1, EncoderVersion2, EncoderVersion3};
+    use crate::{
+        abcd_encode, compress, EncoderVersion1, EncoderVersion2, EncoderVersion3, EncoderVersion4,
+    };
     const DATA: &[u8; 40] = &[
         1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2,
         1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
@@ -283,6 +372,15 @@ mod tests {
     #[test]
     fn encoder_version3() {
         let compressed = compress::<EncoderVersion3>(DATA, 2);
+        assert_eq!(
+            compressed,
+            [1, 4, 4, 2, 7, 7, 5, 6, 8, 2, 10, 1, 12, 13, 4, 0, 19, 0, 8]
+        )
+    }
+
+    #[test]
+    fn encoder_version4() {
+        let compressed = compress::<EncoderVersion4>(DATA, 2);
         assert_eq!(
             compressed,
             [1, 4, 4, 2, 7, 7, 5, 6, 8, 2, 10, 1, 12, 13, 4, 0, 19, 0, 8]
