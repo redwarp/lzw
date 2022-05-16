@@ -1,4 +1,5 @@
 mod encoder;
+mod reader;
 mod writer;
 
 pub use encoder::Encoder;

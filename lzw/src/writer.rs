@@ -134,7 +134,7 @@ mod tests {
     }
 
     #[test]
-    fn write_0xfa_little_endian() -> Result<(), std::io::Error> {
+    fn write_0xfffa_little_endian() -> Result<(), std::io::Error> {
         let mut output = vec![];
 
         let mut writer = BitWriter::new(Endianness::LittleEndian, &mut output);
@@ -191,7 +191,7 @@ mod tests {
     }
 
     #[test]
-    fn write_0xfa_big_endian() -> Result<(), std::io::Error> {
+    fn write_0xfffa_big_endian() -> Result<(), std::io::Error> {
         let mut output = vec![];
 
         let mut writer = BitWriter::new(Endianness::BigEndian, &mut output);
