@@ -91,21 +91,21 @@ impl Encoder {
     }
 
     pub fn encode<R: Read, W: Write>(&mut self, data: R, into: W) -> Result<(), std::io::Error> {
-        let mut bit_writer = crate::writer::BitWriter::new(self.endianness, into);
-        let mut code_size = self.code_size + 1;
+        let mut bit_writer = crate::io::BitWriter::new(self.endianness, into);
+        let mut write_size = self.code_size + 1;
         let clear_code = 1 << self.code_size;
         let end_of_information = (1 << self.code_size) + 1;
 
         let tree = &mut self.string_table;
         tree.reset();
 
-        bit_writer.write(code_size, clear_code)?;
+        bit_writer.write(write_size, clear_code)?;
 
         let mut bytes = data.bytes();
         let k = bytes.next();
         if k.is_none() {
             // Well, it's an empty stream! Leaving early.
-            bit_writer.write(code_size, end_of_information)?;
+            bit_writer.write(write_size, end_of_information)?;
 
             bit_writer.fill()?;
             bit_writer.flush()?;
@@ -122,23 +122,23 @@ impl Encoder {
                 current_prefix = word;
             } else {
                 let index_of_new_entry = tree.add(current_prefix, k);
-                bit_writer.write(code_size, current_prefix)?;
+                bit_writer.write(write_size, current_prefix)?;
                 current_prefix = k as u16;
 
-                if index_of_new_entry == 1 << code_size {
-                    code_size += 1;
+                if index_of_new_entry == 1 << write_size {
+                    write_size += 1;
 
-                    if code_size > 12 {
+                    if write_size > 12 {
                         bit_writer.write(12, clear_code)?;
-                        code_size = self.code_size + 1;
+                        write_size = self.code_size + 1;
                         tree.reset();
                     }
                 }
             }
         }
 
-        bit_writer.write(code_size, current_prefix as u16)?;
-        bit_writer.write(code_size, end_of_information)?;
+        bit_writer.write(write_size, current_prefix as u16)?;
+        bit_writer.write(write_size, end_of_information)?;
 
         bit_writer.fill()?;
         bit_writer.flush()?;
@@ -150,5 +150,56 @@ impl Encoder {
         let mut output = vec![];
         self.encode(data, &mut output)?;
         Ok(output)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encode_4color_data() {
+        let data = [
+            1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2,
+            2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
+        ];
+
+        let mut encoder = Encoder::new(2, Endianness::LittleEndian);
+
+        let mut compressed = vec![];
+        encoder.encode(&data[..], &mut compressed).unwrap();
+
+        assert_eq!(
+            compressed,
+            [0x8C, 0x2D, 0x99, 0x87, 0x2A, 0x1C, 0xDC, 0x33, 0xA0, 0x2, 0x55, 0x0,]
+        )
+    }
+
+    #[test]
+    fn encode_multiple_with_same_encoder() {
+        let data = [
+            1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2,
+            2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
+        ];
+
+        let mut encoder = Encoder::new(2, Endianness::LittleEndian);
+
+        let compression1 = encoder.encode_to_vec(&data[..]).unwrap();
+        let compression2 = encoder.encode_to_vec(&data[..]).unwrap();
+
+        assert_eq!(compression1, compression2);
+    }
+
+    #[test]
+    fn encode_lorem_ipsum() {
+        let data = include_str!("../../test-assets/lorem_ipsum.txt").as_bytes();
+        let expected = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
+
+        let mut encoder = Encoder::new(7, Endianness::LittleEndian);
+
+        let mut compressed = vec![];
+        encoder.encode(&data[..], &mut compressed).unwrap();
+
+        assert_eq!(compressed, expected);
     }
 }
