@@ -1,5 +1,6 @@
 const LOREM_IPSUM: &str = include_str!("../../test-assets/lorem_ipsum.txt");
 const LOREM_IPSUM_LONG: &str = include_str!("../../test-assets/lorem_ipsum_long.txt");
+const LOREM_IPSUM_ENCODED: &[u8] = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
 
 /// See https://www.eecis.udel.edu/~amer/CISC651/lzw.and.gif.explained.html
 /// Use https://crates.io/crates/bitstream-io for bit packing?
@@ -7,6 +8,7 @@ const LOREM_IPSUM_LONG: &str = include_str!("../../test-assets/lorem_ipsum_long.
 fn main() {
     check_string_compression(LOREM_IPSUM);
     check_string_compression(LOREM_IPSUM_LONG);
+    check_string_decoding(LOREM_IPSUM_ENCODED);
 }
 
 fn check_string_compression(string: &str) {
@@ -29,4 +31,15 @@ fn check_string_compression(string: &str) {
         .unwrap();
 
     assert_eq!(compressed, second_compression);
+}
+
+fn check_string_decoding(data: &[u8]) {
+    let mut my_decoder = fast_lzw::Decoder::new(7, fast_lzw::Endianness::LittleEndian);
+    let mut my_decompressed = vec![];
+    my_decoder.decode(data, &mut my_decompressed).unwrap();
+
+    let mut weezl_decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, 7);
+    let weezl_decompressed = weezl_decoder.decode(&data).unwrap();
+
+    assert_eq!(my_decompressed, weezl_decompressed);
 }
