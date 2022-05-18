@@ -192,13 +192,15 @@ mod tests {
 
     #[test]
     fn encode_lorem_ipsum() {
-        let data = include_str!("../../test-assets/lorem_ipsum.txt").as_bytes();
+        let data = include_bytes!("../../test-assets/lorem_ipsum.txt");
         let expected = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
 
         let mut encoder = Encoder::new(7, Endianness::LittleEndian);
 
         let mut compressed = vec![];
         encoder.encode(&data[..], &mut compressed).unwrap();
+
+        std::fs::write("compressed.bin", &compressed).unwrap();
 
         assert_eq!(compressed, expected);
     }

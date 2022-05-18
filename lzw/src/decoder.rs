@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn decode_lorem_ipsum() {
         let data = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
-        let expected = include_str!("../../test-assets/lorem_ipsum.txt").as_bytes();
+        let expected = include_bytes!("../../test-assets/lorem_ipsum.txt");
 
         let mut decoder = Decoder::new(7, Endianness::LittleEndian);
         let mut decoded = vec![];
