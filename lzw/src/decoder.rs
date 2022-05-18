@@ -44,7 +44,7 @@ struct Tree {
 impl Tree {
     fn new(code_size: u8) -> Self {
         let strings = (0..1 << code_size).collect();
-        let mut words = Vec::with_capacity(1 << (code_size + 1));
+        let mut words = Vec::with_capacity(1 << 12);
         words.extend((0..1 << code_size).map(|i| Word {
             start: i,
             end: i + 1,
@@ -112,16 +112,13 @@ impl Debug for Tree {
 pub struct Decoder {
     code_size: u8,
     endianness: Endianness,
-    table: Tree,
 }
 
 impl Decoder {
     pub fn new(code_size: u8, endianness: Endianness) -> Self {
-        let table = Tree::new(code_size);
         Self {
             code_size,
             endianness,
-            table,
         }
     }
 
@@ -132,7 +129,7 @@ impl Decoder {
 
         let clear_code = 1 << self.code_size;
         let end_of_information = (1 << self.code_size) + 1;
-        let tree = &mut self.table;
+        let mut tree = Tree::new(self.code_size);
 
         let expected_clear_code = bit_reader.read(read_size)?;
         if expected_clear_code != clear_code {
@@ -180,6 +177,8 @@ impl Decoder {
                 current_prefix = k;
             }
         }
+
+        into.flush()?;
 
         Ok(())
     }
