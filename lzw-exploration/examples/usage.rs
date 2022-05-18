@@ -9,6 +9,7 @@ fn main() {
     check_string_compression(LOREM_IPSUM);
     check_string_compression(LOREM_IPSUM_LONG);
     check_string_decoding(LOREM_IPSUM_ENCODED);
+    decode_colors();
 }
 
 fn check_string_compression(string: &str) {
@@ -36,10 +37,28 @@ fn check_string_compression(string: &str) {
 fn check_string_decoding(data: &[u8]) {
     let mut my_decoder = fast_lzw::Decoder::new(7, fast_lzw::Endianness::LittleEndian);
     let mut my_decompressed = vec![];
-    my_decoder.decode(data, &mut my_decompressed).unwrap();
+    my_decoder.decode2(data, &mut my_decompressed).unwrap();
 
     let mut weezl_decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, 7);
     let weezl_decompressed = weezl_decoder.decode(&data).unwrap();
 
     assert_eq!(my_decompressed, weezl_decompressed);
+}
+
+fn decode_colors() {
+    let data = [
+        0x8C, 0x2D, 0x99, 0x87, 0x2A, 0x1C, 0xDC, 0x33, 0xA0, 0x2, 0x55, 0x0,
+    ];
+
+    let mut weezl_decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, 2);
+
+    let decoded = weezl_decoder.decode(&data).unwrap();
+
+    assert_eq!(
+        decoded,
+        [
+            1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2,
+            2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
+        ]
+    );
 }

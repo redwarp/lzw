@@ -182,6 +182,85 @@ impl Decoder {
 
         Ok(())
     }
+
+    pub fn decode2<R: Read, W: Write>(&mut self, data: R, into: W) -> Result<(), DecodingError> {
+        const MAX_STACK_SIZE: usize = 4096;
+        let mut prefix: [u16; MAX_STACK_SIZE] = [0; MAX_STACK_SIZE];
+        let mut suffix: [u8; MAX_STACK_SIZE] = [0; MAX_STACK_SIZE];
+        let mut pixel_stack: [u8; MAX_STACK_SIZE + 1] = [0; MAX_STACK_SIZE + 1];
+        for code in 0..1 << self.code_size {
+            suffix[code as usize] = code as u8;
+        }
+
+        let mut bit_reader = BitReader::new(self.endianness, data);
+        let mut read_size = self.code_size + 1;
+        let mut into = into;
+
+        let clear_code = 1 << self.code_size;
+        let end_of_information = (1 << self.code_size) + 1;
+
+        let mut mask = (1 << read_size) - 1;
+        let mut next_index = clear_code + 2;
+        let mut stack_top = 0;
+        let mut first = 0;
+
+        let mut previous_code: Option<u16> = None;
+
+        'read_loop: loop {
+            let mut code = bit_reader.read(read_size)?;
+
+            if code == clear_code {
+                read_size = self.code_size + 1;
+                mask = (1 << read_size) - 1;
+                next_index = clear_code + 2;
+                previous_code = None;
+                continue;
+            } else if code == end_of_information {
+                break 'read_loop;
+            } else if previous_code == None {
+                into.write_all(&[suffix[code as usize]])?;
+                previous_code = Some(code);
+                first = code;
+                continue;
+            }
+
+            let initial_code = code;
+            if code >= next_index {
+                pixel_stack[stack_top] = first as u8;
+                stack_top += 1;
+                code = previous_code.unwrap();
+            }
+
+            while code >= clear_code {
+                pixel_stack[stack_top] = suffix[code as usize];
+                stack_top += 1;
+                code = prefix[code as usize] as u16 & 0xffff
+            }
+
+            first = suffix[code as usize] as u16;
+            into.write_all(&[first as u8])?;
+
+            while stack_top > 0 {
+                stack_top -= 1;
+                into.write_all(&[pixel_stack[stack_top]])?;
+            }
+
+            if next_index < MAX_STACK_SIZE as u16 {
+                prefix[next_index as usize] = previous_code.unwrap() as u16;
+                suffix[next_index as usize] = first as u8;
+                next_index += 1;
+                if next_index & mask == 0 && next_index < MAX_STACK_SIZE as u16 {
+                    read_size += 1;
+                    mask += next_index;
+                }
+            }
+            previous_code = Some(initial_code);
+        }
+
+        into.flush()?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -197,7 +276,7 @@ mod tests {
         let mut decoder = Decoder::new(2, Endianness::LittleEndian);
 
         let mut decoded = vec![];
-        decoder.decode(&data[..], &mut decoded).unwrap();
+        decoder.decode2(&data[..], &mut decoded).unwrap();
 
         assert_eq!(
             decoded,
