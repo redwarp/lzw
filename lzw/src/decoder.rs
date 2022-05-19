@@ -195,6 +195,7 @@ impl Decoder {
         let mut bit_reader = BitReader::new(self.endianness, data);
         let mut read_size = self.code_size + 1;
         let mut into = into;
+        let mut buffer = vec![];
 
         let clear_code = 1 << self.code_size;
         let end_of_information = (1 << self.code_size) + 1;
@@ -210,6 +211,8 @@ impl Decoder {
             let mut code = bit_reader.read(read_size)?;
 
             if code == clear_code {
+                into.write_all(&buffer)?;
+                buffer.clear();
                 read_size = self.code_size + 1;
                 mask = (1 << read_size) - 1;
                 next_index = clear_code + 2;
@@ -218,15 +221,16 @@ impl Decoder {
             } else if code == end_of_information {
                 break 'read_loop;
             } else if previous_code == None {
-                into.write_all(&[suffix[code as usize]])?;
+                // into.write_all(&[suffix[code as usize]])?;
+                buffer.push(suffix[code as usize]);
                 previous_code = Some(code);
-                first = code;
+                first = code as u8;
                 continue;
             }
 
             let initial_code = code;
             if code >= next_index {
-                pixel_stack[stack_top] = first as u8;
+                pixel_stack[stack_top] = first;
                 stack_top += 1;
                 code = previous_code.unwrap();
             }
@@ -237,16 +241,18 @@ impl Decoder {
                 code = prefix[code as usize] as u16 & 0xffff
             }
 
-            first = suffix[code as usize] as u16;
-            into.write_all(&[first as u8])?;
+            first = suffix[code as usize];
+            buffer.write_all(&[first])?;
+            // into.push(first);
+            // into.extend_from_slice(&[first]);
 
             while stack_top > 0 {
                 stack_top -= 1;
-                into.write_all(&[pixel_stack[stack_top]])?;
+                buffer.write_all(&[pixel_stack[stack_top]])?;
             }
 
             if next_index < MAX_STACK_SIZE as u16 {
-                prefix[next_index as usize] = previous_code.unwrap() as u16;
+                prefix[next_index as usize] = previous_code.unwrap();
                 suffix[next_index as usize] = first as u8;
                 next_index += 1;
                 if next_index & mask == 0 && next_index < MAX_STACK_SIZE as u16 {
@@ -257,6 +263,9 @@ impl Decoder {
             previous_code = Some(initial_code);
         }
 
+        buffer.flush()?;
+
+        into.write_all(&buffer)?;
         into.flush()?;
 
         Ok(())
