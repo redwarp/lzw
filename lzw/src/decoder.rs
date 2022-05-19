@@ -234,17 +234,17 @@ impl Decoder {
         const MAX_STACK_SIZE: usize = 4096;
         let mut prefix: [u16; MAX_STACK_SIZE] = [0; MAX_STACK_SIZE];
         let mut suffix: [u8; MAX_STACK_SIZE] = [0; MAX_STACK_SIZE];
-        let mut pixel_stack: [u8; MAX_STACK_SIZE + 1] = [0; MAX_STACK_SIZE + 1];
+        let mut prefix_stack: [u8; MAX_STACK_SIZE + 1] = [0; MAX_STACK_SIZE + 1];
         for code in 0..1 << self.code_size {
             suffix[code as usize] = code as u8;
         }
 
         let mut bit_reader = BitReader::new(self.endianness, data);
-        let mut read_size = self.code_size + 1;
         let mut buffer = Buffer::new(into);
+        let mut read_size = self.code_size + 1;
 
         let clear_code = 1 << self.code_size;
-        let end_of_information = (1 << self.code_size) + 1;
+        let end_of_information = clear_code + 1;
 
         let mut mask = (1 << read_size) - 1;
         let mut next_index = clear_code + 2;
@@ -272,14 +272,15 @@ impl Decoder {
             }
 
             let initial_code = code;
+
             if code >= next_index {
-                pixel_stack[stack_top] = first;
+                prefix_stack[stack_top] = first;
                 stack_top += 1;
                 code = previous_code.unwrap();
             }
 
             while code >= clear_code {
-                pixel_stack[stack_top] = suffix[code as usize];
+                prefix_stack[stack_top] = suffix[code as usize];
                 stack_top += 1;
                 code = prefix[code as usize]
             }
@@ -289,7 +290,7 @@ impl Decoder {
 
             while stack_top > 0 {
                 stack_top -= 1;
-                buffer.write_all(&[pixel_stack[stack_top]])?;
+                buffer.write_all(&[prefix_stack[stack_top]])?;
             }
 
             if next_index < MAX_STACK_SIZE as u16 {
@@ -300,6 +301,10 @@ impl Decoder {
                     read_size += 1;
                     mask += next_index;
                 }
+            } else {
+                return Err(DecodingError::Lzw(
+                    "Dictionnary growing past 4096, expected CLEAR_CODE missing",
+                ));
             }
             previous_code = Some(initial_code);
         }

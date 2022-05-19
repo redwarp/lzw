@@ -200,8 +200,6 @@ mod tests {
         let mut compressed = vec![];
         encoder.encode(&data[..], &mut compressed).unwrap();
 
-        std::fs::write("compressed.bin", &compressed).unwrap();
-
         assert_eq!(compressed, expected);
     }
 }

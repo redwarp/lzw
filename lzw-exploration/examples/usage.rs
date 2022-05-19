@@ -1,6 +1,8 @@
 const LOREM_IPSUM: &str = include_str!("../../test-assets/lorem_ipsum.txt");
 const LOREM_IPSUM_LONG: &str = include_str!("../../test-assets/lorem_ipsum_long.txt");
 const LOREM_IPSUM_ENCODED: &[u8] = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
+const LOREM_IPSUM_LONG_ENCODED: &[u8] =
+    include_bytes!("../../test-assets/lorem_ipsum_long_encoded.bin");
 
 /// See https://www.eecis.udel.edu/~amer/CISC651/lzw.and.gif.explained.html
 /// Use https://crates.io/crates/bitstream-io for bit packing?
@@ -9,6 +11,7 @@ fn main() {
     check_string_compression(LOREM_IPSUM);
     check_string_compression(LOREM_IPSUM_LONG);
     check_string_decoding(LOREM_IPSUM_ENCODED);
+    check_string_decoding(LOREM_IPSUM_LONG_ENCODED);
     decode_colors();
 }
 
