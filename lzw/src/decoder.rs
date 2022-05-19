@@ -109,6 +109,53 @@ impl Debug for Tree {
     }
 }
 
+const BUFFER_SIZE: usize = 8192;
+
+struct Buffer<W: Write> {
+    buffer: [u8; BUFFER_SIZE],
+    into: W,
+    count: usize,
+}
+
+impl<W: Write> Buffer<W> {
+    #[inline]
+    fn new(into: W) -> Buffer<W> {
+        Self {
+            buffer: [0; BUFFER_SIZE],
+            into,
+            count: 0,
+        }
+    }
+
+    fn write_all(&mut self, data: &[u8]) -> Result<(), std::io::Error> {
+        let remaining = self.remaining();
+        if remaining >= data.len() {
+            self.buffer[self.count..self.count + data.len()].copy_from_slice(data);
+            self.count += data.len();
+        } else {
+            self.buffer[self.count..].copy_from_slice(&data[..remaining]);
+            self.into.write_all(&self.buffer)?;
+            self.buffer[..data.len() - remaining].copy_from_slice(&data[remaining..]);
+            self.count = data.len() - remaining
+        }
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), std::io::Error> {
+        if self.count == 0 {
+            return Ok(());
+        }
+
+        self.into.write_all(&self.buffer[..self.count])?;
+        self.count = 0;
+        Ok(())
+    }
+
+    fn remaining(&self) -> usize {
+        BUFFER_SIZE - self.count
+    }
+}
+
 pub struct Decoder {
     code_size: u8,
     endianness: Endianness,
@@ -194,7 +241,7 @@ impl Decoder {
 
         let mut bit_reader = BitReader::new(self.endianness, data);
         let mut read_size = self.code_size + 1;
-        let mut into = into;
+        let mut buffer = Buffer::new(into);
 
         let clear_code = 1 << self.code_size;
         let end_of_information = (1 << self.code_size) + 1;
@@ -218,8 +265,7 @@ impl Decoder {
             } else if code == end_of_information {
                 break 'read_loop;
             } else if previous_code == None {
-                // into.write_all(&[suffix[code as usize]])?;
-                into.write_all(&[suffix[code as usize]])?;
+                buffer.write_all(&[suffix[code as usize]])?;
                 previous_code = Some(code);
                 first = code as u8;
                 continue;
@@ -235,22 +281,20 @@ impl Decoder {
             while code >= clear_code {
                 pixel_stack[stack_top] = suffix[code as usize];
                 stack_top += 1;
-                code = prefix[code as usize] as u16 & 0xffff
+                code = prefix[code as usize]
             }
 
             first = suffix[code as usize];
-            into.write_all(&[first])?;
-            // into.push(first);
-            // into.extend_from_slice(&[first]);
+            buffer.write_all(&[first])?;
 
             while stack_top > 0 {
                 stack_top -= 1;
-                into.write_all(&[pixel_stack[stack_top]])?;
+                buffer.write_all(&[pixel_stack[stack_top]])?;
             }
 
             if next_index < MAX_STACK_SIZE as u16 {
                 prefix[next_index as usize] = previous_code.unwrap();
-                suffix[next_index as usize] = first as u8;
+                suffix[next_index as usize] = first;
                 next_index += 1;
                 if next_index & mask == 0 && next_index < MAX_STACK_SIZE as u16 {
                     read_size += 1;
@@ -260,7 +304,7 @@ impl Decoder {
             previous_code = Some(initial_code);
         }
 
-        into.flush()?;
+        buffer.flush()?;
 
         Ok(())
     }
@@ -301,7 +345,7 @@ mod tests {
         let mut decoded1 = vec![];
         let mut decoded2 = vec![];
         decoder.decode(&data[..], &mut decoded1).unwrap();
-        decoder.decode(&data[..], &mut decoded2).unwrap();
+        decoder.decode2(&data[..], &mut decoded2).unwrap();
 
         assert_eq!(decoded1, decoded2);
     }
@@ -313,8 +357,77 @@ mod tests {
 
         let mut decoder = Decoder::new(7, Endianness::LittleEndian);
         let mut decoded = vec![];
-        decoder.decode(&data[..], &mut decoded).unwrap();
+        decoder.decode2(&data[..], &mut decoded).unwrap();
 
         assert_eq!(decoded, expected);
+    }
+
+    #[test]
+    fn buffer_write_more_than_can_chew() {
+        let mut into = vec![];
+        let mut buffer = Buffer::new(&mut into);
+
+        let data = vec![10; 10000];
+        buffer.write_all(&data).unwrap();
+        buffer.flush().unwrap();
+
+        assert_eq!(into.len(), 10000);
+    }
+
+    #[test]
+    fn buffer_overflow_with_two_slices() {
+        let mut into = vec![];
+        let mut buffer = Buffer::new(&mut into);
+
+        let data = vec![10; 10000];
+        buffer.write_all(&data[..5000]).unwrap();
+        buffer.write_all(&data[5000..]).unwrap();
+        buffer.flush().unwrap();
+
+        assert_eq!(into.len(), 10000);
+    }
+
+    #[test]
+    fn buffer_write_one_by_one() {
+        let mut into = vec![];
+        let mut buffer = Buffer::new(&mut into);
+
+        let data = vec![0; 10000];
+
+        for i in 0..10000 {
+            buffer.write_all(&data[i..i + 1]).unwrap();
+        }
+
+        buffer.flush().unwrap();
+
+        assert_eq!(into.len(), 10000);
+    }
+
+    #[test]
+    fn buffer_flush() {
+        let mut into = vec![];
+        let data = vec![0; 50];
+
+        let mut buffer = Buffer::new(&mut into);
+        buffer.write_all(&data).unwrap();
+        assert_eq!(into.len(), 0);
+
+        let mut buffer = Buffer::new(&mut into);
+        buffer.write_all(&data).unwrap();
+        buffer.flush().unwrap();
+        assert_eq!(into.len(), 50);
+    }
+
+    #[test]
+    fn buffer_flush_multiple() {
+        let mut into = vec![];
+        let data = vec![0; 50];
+
+        let mut buffer = Buffer::new(&mut into);
+        buffer.write_all(&data).unwrap();
+        buffer.flush().unwrap();
+        buffer.write_all(&data).unwrap();
+        buffer.flush().unwrap();
+        assert_eq!(into.len(), 100);
     }
 }
