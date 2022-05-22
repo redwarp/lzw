@@ -151,6 +151,7 @@ impl<W: Write> Buffer<W> {
         Ok(())
     }
 
+    #[inline]
     fn remaining(&self) -> usize {
         BUFFER_SIZE - self.count
     }
