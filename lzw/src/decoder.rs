@@ -186,11 +186,7 @@ impl Decoder {
         }
         tree.clear();
 
-        let mut current_prefix = bit_reader.read(read_size)?;
-        if current_prefix == end_of_information {
-            return Ok(());
-        }
-        into.write_all(&[current_prefix as u8])?;
+        let mut current_prefix: Option<u16> = None;
 
         'read_loop: loop {
             let k = bit_reader.read(read_size)?;
@@ -198,33 +194,35 @@ impl Decoder {
             if k == clear_code {
                 tree.clear();
                 read_size = self.code_size + 1;
-                current_prefix = bit_reader.read(read_size)?;
-                if current_prefix == end_of_information {
-                    return Ok(());
-                }
-                into.write_all(&[current_prefix as u8])?;
+                current_prefix = None;
+                continue 'read_loop;
             } else if k == end_of_information {
                 break 'read_loop;
-            } else {
-                let extra_char = if let Some(string) = tree.find_word(k) {
-                    into.write_all(string)?;
-                    string[0]
-                } else {
-                    let word = tree.find_word(current_prefix).expect("Should be set");
-
-                    let extra_char = word[0];
-                    into.write_all(word)?;
-                    into.write_all(&[extra_char])?;
-                    extra_char
-                };
-                let index_of_new_entry = tree.add(current_prefix, extra_char);
-
-                if index_of_new_entry == (1 << read_size) - 1 && read_size < MAX_READ_SIZE {
-                    read_size += 1;
-                }
-
-                current_prefix = k;
+            } else if current_prefix == None {
+                into.write_all(&[k as u8])?;
+                current_prefix = Some(k);
+                continue 'read_loop;
             }
+
+            let prefix = current_prefix.unwrap();
+            let extra_char = if let Some(string) = tree.find_word(k) {
+                into.write_all(string)?;
+                string[0]
+            } else {
+                let word = tree.find_word(prefix).expect("Should be set");
+
+                let extra_char = word[0];
+                into.write_all(word)?;
+                into.write_all(&[extra_char])?;
+                extra_char
+            };
+            let index_of_new_entry = tree.add(prefix, extra_char);
+
+            if index_of_new_entry == (1 << read_size) - 1 && read_size < MAX_READ_SIZE {
+                read_size += 1;
+            }
+
+            current_prefix = Some(k);
         }
 
         into.flush()?;
