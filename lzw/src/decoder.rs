@@ -1,4 +1,5 @@
 use std::{
+    array,
     fmt::{Debug, Display},
     io::{Read, Write},
 };
@@ -28,88 +29,7 @@ impl From<std::io::Error> for DecodingError {
     }
 }
 
-// Idea: Have one big vec of [u8]. Store the strings there, and keep a vec of [start, length] for each word.
-#[derive(Debug, Clone)]
-struct Word {
-    start: usize,
-    end: usize,
-}
-
-struct Tree {
-    code_size: u8,
-    strings: Vec<u8>,
-    words: Vec<Word>,
-}
-
-impl Tree {
-    fn new(code_size: u8) -> Self {
-        let strings = (0..1 << code_size).collect();
-        let mut words = Vec::with_capacity(1 << 12);
-        words.extend((0..1 << code_size).map(|i| Word {
-            start: i,
-            end: i + 1,
-        }));
-        words.push(Word { start: 0, end: 0 });
-        words.push(Word { start: 0, end: 0 });
-
-        Self {
-            code_size,
-            strings,
-            words,
-        }
-    }
-
-    fn clear(&mut self) {
-        self.strings.resize(1 << self.code_size, 0);
-        self.words
-            .resize((1 << self.code_size) + 2, Word { start: 0, end: 0 });
-    }
-
-    fn find_word(&self, code: u16) -> Option<&[u8]> {
-        if let Some(word) = self.words.get(code as usize) {
-            Some(&self.strings[word.start..word.end])
-        } else {
-            None
-        }
-    }
-
-    fn add(&mut self, prefix: u16, k: u8) -> u16 {
-        let prefix_word = &self.words[prefix as usize];
-        let new_word = if prefix_word.end == self.strings.len() {
-            // Adding to last inserted word.
-            self.strings.push(k);
-            Word {
-                start: prefix_word.start,
-                end: prefix_word.end + 1,
-            }
-        } else {
-            let start = self.strings.len();
-            self.strings
-                .extend_from_within(prefix_word.start..prefix_word.end);
-            self.strings.push(k);
-            let end = self.strings.len();
-            Word { start, end }
-        };
-
-        let new_index = self.words.len();
-        self.words.push(new_word);
-        new_index as u16
-    }
-}
-
-impl Debug for Tree {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, word) in self.words.iter().enumerate() {
-            f.write_fmt(format_args!(
-                "{i} - {:?}\n",
-                &self.strings[word.start..word.end]
-            ))?;
-        }
-        Ok(())
-    }
-}
-
-const BUFFER_SIZE: usize = 8192;
+const BUFFER_SIZE: usize = 8096;
 
 struct Buffer<W: Write> {
     buffer: [u8; BUFFER_SIZE],
@@ -138,6 +58,19 @@ impl<W: Write> Buffer<W> {
             self.buffer[..data.len() - remaining].copy_from_slice(&data[remaining..]);
             self.count = data.len() - remaining
         }
+        Ok(())
+    }
+
+    fn write(&mut self, data: u8) -> Result<(), std::io::Error> {
+        if self.remaining() != 0 {
+            self.buffer[self.count] = data;
+            self.count += 1;
+        } else {
+            self.into.write_all(&self.buffer)?;
+            self.buffer[0] = data;
+            self.count = 1;
+        }
+
         Ok(())
     }
 
@@ -171,71 +104,19 @@ impl Decoder {
     }
 
     pub fn decode<R: Read, W: Write>(&mut self, data: R, into: W) -> Result<(), DecodingError> {
-        const MAX_READ_SIZE: u8 = 12;
-
-        let mut bit_reader = BitReader::new(self.endianness, data);
-        let mut read_size = self.code_size + 1;
-        let mut into = into;
-
-        let clear_code = 1 << self.code_size;
-        let end_of_information = (1 << self.code_size) + 1;
-        let mut tree = Tree::new(self.code_size);
-
-        let expected_clear_code = bit_reader.read(read_size)?;
-        if expected_clear_code != clear_code {
-            return Err(DecodingError::Lzw("Missing clear code at stream start"));
-        }
-        tree.clear();
-
-        let mut current_prefix: Option<u16> = None;
-
-        'read_loop: loop {
-            let k = bit_reader.read(read_size)?;
-
-            if k == clear_code {
-                tree.clear();
-                read_size = self.code_size + 1;
-                current_prefix = None;
-                continue 'read_loop;
-            } else if k == end_of_information {
-                break 'read_loop;
-            } else if current_prefix == None {
-                into.write_all(&[k as u8])?;
-                current_prefix = Some(k);
-                continue 'read_loop;
-            }
-
-            let prefix = current_prefix.unwrap();
-            let extra_char = if let Some(string) = tree.find_word(k) {
-                into.write_all(string)?;
-                string[0]
-            } else {
-                let word = tree.find_word(prefix).expect("Should be set");
-
-                let extra_char = word[0];
-                into.write_all(word)?;
-                into.write_all(&[extra_char])?;
-                extra_char
-            };
-            let index_of_new_entry = tree.add(prefix, extra_char);
-
-            if index_of_new_entry == (1 << read_size) - 1 && read_size < MAX_READ_SIZE {
-                read_size += 1;
-            }
-
-            current_prefix = Some(k);
-        }
-
-        into.flush()?;
-
-        Ok(())
-    }
-
-    pub fn decode2<R: Read, W: Write>(&mut self, data: R, into: W) -> Result<(), DecodingError> {
-        const MAX_STACK_SIZE: usize = 4096;
-        let mut prefix: [u16; MAX_STACK_SIZE] = [0; MAX_STACK_SIZE];
-        let mut suffix: [u8; MAX_STACK_SIZE] = [0; MAX_STACK_SIZE];
-        let mut prefix_stack: [u8; MAX_STACK_SIZE + 1] = [0; MAX_STACK_SIZE + 1];
+        const TABLE_MAX_SIZE: usize = 4096;
+        // The stack should be as big as the longest word that the dictionnary can have.
+        // The longuest word would be reached if by bad luck, each entry of the dictionnary is made of the
+        // previous entry, increasing in size each time. This size would be the biggest for the minimum code size of 2,
+        // as there would be more "free entry" in the table not corresponding to a single digit.
+        // In effect, stack max size = 4096 - 2^2 - 2 entries for clear and EOF + 1.
+        const STACK_MAX_SIZE: usize = 4091;
+        // In effect, our prefix and suffix is our decoding table, as each word can be expressed by a previous
+        // code (prefix), and the extra letter (suffix).
+        let mut prefix: [u16; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
+        let mut suffix: [u8; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
+        // We will use this stack to decode each string.
+        let mut decoding_stack: [u8; STACK_MAX_SIZE] = [0; STACK_MAX_SIZE];
         for code in 0..1 << self.code_size {
             suffix[code as usize] = code as u8;
         }
@@ -250,7 +131,7 @@ impl Decoder {
         let mut mask = (1 << read_size) - 1;
         let mut next_index = clear_code + 2;
         let mut stack_top = 0;
-        let mut first = 0;
+        let mut first_char = 0;
 
         let mut previous_code: Option<u16> = None;
 
@@ -266,39 +147,40 @@ impl Decoder {
             } else if code == end_of_information {
                 break 'read_loop;
             } else if previous_code == None {
-                buffer.write_all(&[suffix[code as usize]])?;
+                buffer.write_all(array::from_ref(&suffix[code as usize]))?;
                 previous_code = Some(code);
-                first = code as u8;
+                first_char = code as u8;
                 continue;
             }
 
             let initial_code = code;
 
             if code >= next_index {
-                prefix_stack[stack_top] = first;
+                // New word!
+                decoding_stack[stack_top] = first_char;
                 stack_top += 1;
                 code = previous_code.unwrap();
             }
 
             while code >= clear_code {
-                prefix_stack[stack_top] = suffix[code as usize];
+                decoding_stack[stack_top] = suffix[code as usize];
                 stack_top += 1;
                 code = prefix[code as usize]
             }
 
-            first = suffix[code as usize];
-            buffer.write_all(&[first])?;
+            first_char = code as u8;
+            buffer.write(first_char)?;
 
             while stack_top > 0 {
                 stack_top -= 1;
-                buffer.write_all(&[prefix_stack[stack_top]])?;
+                buffer.write_all(array::from_ref(&decoding_stack[stack_top]))?;
             }
 
-            if next_index < MAX_STACK_SIZE as u16 {
+            if next_index < TABLE_MAX_SIZE as u16 {
                 prefix[next_index as usize] = previous_code.unwrap();
-                suffix[next_index as usize] = first;
+                suffix[next_index as usize] = first_char;
                 next_index += 1;
-                if next_index & mask == 0 && next_index < MAX_STACK_SIZE as u16 {
+                if next_index & mask == 0 && next_index < TABLE_MAX_SIZE as u16 {
                     read_size += 1;
                     mask += next_index;
                 }
@@ -329,7 +211,7 @@ mod tests {
         let mut decoder = Decoder::new(2, Endianness::LittleEndian);
 
         let mut decoded = vec![];
-        decoder.decode2(&data[..], &mut decoded).unwrap();
+        decoder.decode(&data[..], &mut decoded).unwrap();
 
         assert_eq!(
             decoded,
@@ -351,7 +233,7 @@ mod tests {
         let mut decoded1 = vec![];
         let mut decoded2 = vec![];
         decoder.decode(&data[..], &mut decoded1).unwrap();
-        decoder.decode2(&data[..], &mut decoded2).unwrap();
+        decoder.decode(&data[..], &mut decoded2).unwrap();
 
         assert_eq!(decoded1, decoded2);
     }
@@ -363,7 +245,7 @@ mod tests {
 
         let mut decoder = Decoder::new(7, Endianness::LittleEndian);
         let mut decoded = vec![];
-        decoder.decode2(&data[..], &mut decoded).unwrap();
+        decoder.decode(&data[..], &mut decoded).unwrap();
 
         assert_eq!(decoded, expected);
     }

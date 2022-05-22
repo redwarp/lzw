@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+mod decoding;
 mod tree;
 
 pub fn abcd_encode(text: &str) -> Vec<usize> {

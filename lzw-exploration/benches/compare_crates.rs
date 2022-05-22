@@ -39,20 +39,12 @@ pub fn decoding_all_crates(c: &mut Criterion) {
             decoder.decode(LOREM_IPSUM_ENCODED).unwrap();
         })
     });
-    group.bench_function("fast-lzw", |b| {
-        b.iter(|| {
-            let mut decoded = vec![];
-            let mut decoder =
-                fast_lzw::Decoder::new(black_box(7), fast_lzw::Endianness::LittleEndian);
-            decoder.decode(LOREM_IPSUM_ENCODED, &mut decoded).unwrap();
-        })
-    });
     group.bench_function("fast-lzw-2", |b| {
         b.iter(|| {
             let mut decoded = vec![];
             let mut decoder =
                 fast_lzw::Decoder::new(black_box(7), fast_lzw::Endianness::LittleEndian);
-            decoder.decode2(LOREM_IPSUM_ENCODED, &mut decoded).unwrap();
+            decoder.decode(LOREM_IPSUM_ENCODED, &mut decoded).unwrap();
         })
     });
 }

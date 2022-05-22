@@ -13,6 +13,7 @@ fn main() {
     check_string_decoding(LOREM_IPSUM_ENCODED);
     check_string_decoding(LOREM_IPSUM_LONG_ENCODED);
     decode_colors();
+    calculate_max_stack();
 }
 
 fn check_string_compression(string: &str) {
@@ -40,7 +41,7 @@ fn check_string_compression(string: &str) {
 fn check_string_decoding(data: &[u8]) {
     let mut my_decoder = fast_lzw::Decoder::new(7, fast_lzw::Endianness::LittleEndian);
     let mut my_decompressed = vec![];
-    my_decoder.decode2(data, &mut my_decompressed).unwrap();
+    my_decoder.decode(data, &mut my_decompressed).unwrap();
 
     let mut weezl_decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, 7);
     let weezl_decompressed = weezl_decoder.decode(&data).unwrap();
@@ -64,4 +65,15 @@ fn decode_colors() {
             2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
         ]
     );
+}
+
+// How big should the stack be?
+fn calculate_max_stack() {
+    let dict_max_size = 4096;
+    let max_free = dict_max_size - ((1 << 2) + 2);
+
+    println!("Max length of word is {}", max_free + 1);
+
+    let max = 4096 - (1 << 2) - 1;
+    println!("Max stack = {max}");
 }
