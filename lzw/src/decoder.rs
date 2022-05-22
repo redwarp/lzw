@@ -170,6 +170,8 @@ impl Decoder {
     }
 
     pub fn decode<R: Read, W: Write>(&mut self, data: R, into: W) -> Result<(), DecodingError> {
+        const MAX_READ_SIZE: u8 = 12;
+
         let mut bit_reader = BitReader::new(self.endianness, data);
         let mut read_size = self.code_size + 1;
         let mut into = into;
@@ -217,7 +219,7 @@ impl Decoder {
                 };
                 let index_of_new_entry = tree.add(current_prefix, extra_char);
 
-                if index_of_new_entry == (1 << read_size) - 1 {
+                if index_of_new_entry == (1 << read_size) - 1 && read_size < MAX_READ_SIZE {
                     read_size += 1;
                 }
 
