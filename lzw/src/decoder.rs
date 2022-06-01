@@ -1,10 +1,12 @@
 use std::{
-    array,
     fmt::{Debug, Display},
     io::{Read, Write},
 };
 
-use crate::{io::BitReader, Endianness};
+use crate::{
+    io::{BigEndianReader, BitReader, LittleEndianReader},
+    Endianness,
+};
 
 #[derive(Debug)]
 pub enum DecodingError {
@@ -47,6 +49,7 @@ impl<W: Write> Buffer<W> {
         }
     }
 
+    #[allow(dead_code)]
     fn write_all(&mut self, data: &[u8]) -> Result<(), std::io::Error> {
         let remaining = self.remaining();
         if remaining >= data.len() {
@@ -104,6 +107,17 @@ impl Decoder {
     }
 
     pub fn decode<R: Read, W: Write>(&mut self, data: R, into: W) -> Result<(), DecodingError> {
+        match self.endianness {
+            Endianness::BigEndian => self.inner_decode(BigEndianReader::new(data), into),
+            Endianness::LittleEndian => self.inner_decode(LittleEndianReader::new(data), into),
+        }
+    }
+
+    fn inner_decode<B: BitReader, W: Write>(
+        &mut self,
+        bit_reader: B,
+        into: W,
+    ) -> Result<(), DecodingError> {
         const TABLE_MAX_SIZE: usize = 4096;
         // The stack should be as big as the longest word that the dictionnary can have.
         // The longuest word would be reached if by bad luck, each entry of the dictionnary is made of the
@@ -121,7 +135,6 @@ impl Decoder {
             suffix[code as usize] = code as u8;
         }
 
-        let mut bit_reader = BitReader::new(self.endianness, data);
         let mut buffer = Buffer::new(into);
         let mut read_size = self.code_size + 1;
 
@@ -134,6 +147,7 @@ impl Decoder {
         let mut first_char = 0;
 
         let mut previous_code: Option<u16> = None;
+        let mut bit_reader = bit_reader;
 
         'read_loop: loop {
             let mut code = bit_reader.read(read_size)?;
@@ -147,7 +161,7 @@ impl Decoder {
             } else if code == end_of_information {
                 break 'read_loop;
             } else if previous_code == None {
-                buffer.write_all(array::from_ref(&suffix[code as usize]))?;
+                buffer.write(suffix[code as usize])?;
                 previous_code = Some(code);
                 first_char = code as u8;
                 continue;
@@ -173,7 +187,7 @@ impl Decoder {
 
             while stack_top > 0 {
                 stack_top -= 1;
-                buffer.write_all(array::from_ref(&decoding_stack[stack_top]))?;
+                buffer.write(decoding_stack[stack_top])?;
             }
 
             if next_index < TABLE_MAX_SIZE as u16 {
@@ -200,6 +214,7 @@ impl Decoder {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]

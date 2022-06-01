@@ -1,6 +1,9 @@
 use std::io::{Read, Write};
 
-use crate::Endianness;
+use crate::{
+    io::{BigEndianWriter, BitWriter2, LittleEndianWriter},
+    Endianness,
+};
 
 #[derive(Debug, Clone)]
 enum Node {
@@ -91,7 +94,19 @@ impl Encoder {
     }
 
     pub fn encode<R: Read, W: Write>(&mut self, data: R, into: W) -> Result<(), std::io::Error> {
-        let mut bit_writer = crate::io::BitWriter::new(self.endianness, into);
+        match self.endianness {
+            Endianness::BigEndian => self.inner_encode(data, BigEndianWriter::new(into)),
+            Endianness::LittleEndian => self.inner_encode(data, LittleEndianWriter::new(into)),
+        }
+    }
+
+    fn inner_encode<R: Read, B: BitWriter2>(
+        &mut self,
+        data: R,
+        bit_writer: B,
+    ) -> Result<(), std::io::Error> {
+        let mut bit_writer = bit_writer;
+
         let mut write_size = self.code_size + 1;
         let clear_code = 1 << self.code_size;
         let end_of_information = (1 << self.code_size) + 1;
