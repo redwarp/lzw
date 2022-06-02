@@ -1,5 +1,5 @@
 [workspace]
-members = ["lzw", "lzw-exploration", "memory-profiling"]
+members = ["lzw", "exploration", "memory-profiling"]
 resolver = "2"
 
 [profile.release.package.memory-profiling]
