@@ -10,26 +10,23 @@ pub fn encoding_text(c: &mut Criterion) {
     let mut group = c.benchmark_group("encoding text");
     group.bench_function("lzw", |b| {
         b.iter(|| {
-            let mut compressed = vec![];
             let mut encoder =
-                lzw::Encoder::new(lzw::LsbWriter::new(&mut compressed), black_box(7)).unwrap();
+                lzw::Encoder::new(lzw::LsbWriter::new(std::io::sink()), black_box(7)).unwrap();
             encoder.encode_bytes(LOREM_IPSUM).unwrap();
         })
     });
     group.bench_function("weezl", |b| {
         b.iter(|| {
-            let mut compressed = vec![];
             let mut encoder = weezl::encode::Encoder::new(weezl::BitOrder::Lsb, black_box(7));
-            let mut stream_encoder = encoder.into_stream(&mut compressed);
+            let mut stream_encoder = encoder.into_stream(std::io::sink());
             stream_encoder.encode(LOREM_IPSUM).status.unwrap();
         })
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
-            let mut compressed = vec![];
             salzweg::Encoder::encode(
                 LOREM_IPSUM,
-                &mut compressed,
+                std::io::sink(),
                 black_box(7),
                 salzweg::Endianness::LittleEndian,
             )
@@ -44,26 +41,23 @@ pub fn encoding_random_data(c: &mut Criterion) {
     let mut group = c.benchmark_group("encoding random data");
     group.bench_function("lzw", |b| {
         b.iter(|| {
-            let mut compressed = vec![];
             let mut encoder =
-                lzw::Encoder::new(lzw::LsbWriter::new(&mut compressed), black_box(8)).unwrap();
+                lzw::Encoder::new(lzw::LsbWriter::new(std::io::sink()), black_box(8)).unwrap();
             encoder.encode_bytes(&data).unwrap();
         })
     });
     group.bench_function("weezl", |b| {
         b.iter(|| {
-            let mut compressed = vec![];
             let mut encoder = weezl::encode::Encoder::new(weezl::BitOrder::Lsb, black_box(8));
-            let mut stream_encoder = encoder.into_stream(&mut compressed);
+            let mut stream_encoder = encoder.into_stream(std::io::sink());
             stream_encoder.encode(&data[..]).status.unwrap();
         })
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
-            let mut compressed = vec![];
             salzweg::Encoder::encode(
                 &data[..],
-                &mut compressed,
+                std::io::sink(),
                 black_box(8),
                 salzweg::Endianness::LittleEndian,
             )
@@ -78,26 +72,23 @@ pub fn encoding_image_data(c: &mut Criterion) {
     let mut group = c.benchmark_group("encoding image data");
     group.bench_function("lzw", |b| {
         b.iter(|| {
-            let mut compressed = vec![];
             let mut encoder =
-                lzw::Encoder::new(lzw::LsbWriter::new(&mut compressed), black_box(7)).unwrap();
+                lzw::Encoder::new(lzw::LsbWriter::new(std::io::sink()), black_box(7)).unwrap();
             encoder.encode_bytes(&data).unwrap();
         })
     });
     group.bench_function("weezl", |b| {
         b.iter(|| {
-            let mut compressed = vec![];
             let mut encoder = weezl::encode::Encoder::new(weezl::BitOrder::Lsb, black_box(7));
-            let mut stream_encoder = encoder.into_stream(&mut compressed);
+            let mut stream_encoder = encoder.into_stream(std::io::sink());
             stream_encoder.encode(&data[..]).status.unwrap();
         })
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
-            let mut compressed = vec![];
             salzweg::Encoder::encode(
                 &data[..],
-                &mut compressed,
+                std::io::sink(),
                 black_box(7),
                 salzweg::Endianness::LittleEndian,
             )
@@ -111,15 +102,18 @@ pub fn decoding_text(c: &mut Criterion) {
     group.bench_function("weezl", |b| {
         b.iter(|| {
             let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(7));
-            decoder.decode(LOREM_IPSUM_ENCODED).unwrap();
+            decoder
+                .into_stream(std::io::sink())
+                .decode(LOREM_IPSUM_ENCODED)
+                .status
+                .unwrap();
         })
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
-            let mut decoded = vec![];
             salzweg::Decoder::decode(
                 LOREM_IPSUM_ENCODED,
-                &mut decoded,
+                std::io::sink(),
                 black_box(7),
                 salzweg::Endianness::LittleEndian,
             )
@@ -135,15 +129,18 @@ pub fn decoding_random_data(c: &mut Criterion) {
     group.bench_function("weezl", |b| {
         b.iter(|| {
             let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(8));
-            decoder.decode(&encoded_data).unwrap();
+            decoder
+                .into_stream(std::io::sink())
+                .decode(&encoded_data[..])
+                .status
+                .unwrap();
         })
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
-            let mut decoded = vec![];
             salzweg::Decoder::decode(
                 &encoded_data[..],
-                &mut decoded,
+                std::io::sink(),
                 black_box(8),
                 salzweg::Endianness::LittleEndian,
             )
@@ -158,15 +155,18 @@ pub fn decoding_image_data(c: &mut Criterion) {
     group.bench_function("weezl", |b| {
         b.iter(|| {
             let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(7));
-            decoder.decode(&encoded_data).unwrap();
+            decoder
+                .into_stream(std::io::sink())
+                .decode(&encoded_data[..])
+                .status
+                .unwrap();
         })
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
-            let mut decoded = vec![];
             salzweg::Decoder::decode(
                 &encoded_data[..],
-                &mut decoded,
+                std::io::sink(),
                 black_box(7),
                 salzweg::Endianness::LittleEndian,
             )
@@ -208,17 +208,11 @@ fn prepare_image_data() -> Vec<u8> {
 fn prepare_encoded_image_data() -> Vec<u8> {
     let data = prepare_image_data();
 
-    let mut compressed = vec![];
+    let mut output = vec![];
 
-    salzweg::Encoder::encode(
-        &data[..],
-        &mut compressed,
-        7,
-        salzweg::Endianness::LittleEndian,
-    )
-    .unwrap();
+    salzweg::Encoder::encode(&data[..], &mut output, 7, salzweg::Endianness::LittleEndian).unwrap();
 
-    compressed
+    output
 }
 
 criterion_group!(

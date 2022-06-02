@@ -254,6 +254,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
+name = "exploration"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "lzw",
+ "png",
+ "rand",
+ "salzweg",
+ "weezl",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -362,18 +374,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d947cbb889ed21c2a84be6ffbaebf5b4e0f4340638cba0444907e38b56be084"
 
 [[package]]
-name = "lzw-exploration"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "lzw",
- "png",
- "rand",
- "salzweg",
- "weezl",
-]
-
-[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -393,6 +393,7 @@ name = "memory-profiling"
 version = "0.1.0"
 dependencies = [
  "dhat",
+ "lzw",
  "salzweg",
  "weezl",
 ]

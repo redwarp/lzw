@@ -7,7 +7,7 @@ const LOREM_IPSUM_LONG: &str = include_str!("../../test-assets/lorem_ipsum_long.
 fn compress_text_salzweg() {
     let _profiler = dhat::Profiler::builder().testing().build();
 
-    let mut compressed = Vec::with_capacity(10000);
+    let mut compressed = std::io::sink();
 
     let start_stats = dhat::HeapStats::get();
 
@@ -20,9 +20,6 @@ fn compress_text_salzweg() {
     .unwrap();
 
     let stats = dhat::HeapStats::get();
-
-    println!("Let's profile stuff!");
-    println!("Compressed size: {}", compressed.len());
 
     println!("{start_stats:?}");
     println!("{stats:?}");

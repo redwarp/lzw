@@ -8,7 +8,7 @@ const LOREM_IPSUM_LONG_ENCODED: &[u8] =
 fn decompress_text_salzweg() {
     let _profiler = dhat::Profiler::builder().testing().build();
 
-    let mut decompressed = Vec::with_capacity(25000);
+    let mut decompressed = std::io::sink();
 
     let start_stats = dhat::HeapStats::get();
 
@@ -20,9 +20,6 @@ fn decompress_text_salzweg() {
         .unwrap();
 
     let stats = dhat::HeapStats::get();
-
-    println!("Let's profile stuff!");
-    println!("Compressed size: {}", decompressed.len());
 
     println!("{start_stats:?}");
     println!("{stats:?}");

@@ -1,12 +1,12 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use lzw_exploration::{
+use exploration::{
     compress, EncoderVersion1, EncoderVersion2, EncoderVersion3, EncoderVersion4, EncoderVersion5,
     EncoderVersion6,
 };
 
 const LOREM_IPSUM: &[u8] = include_str!("../../test-assets/lorem_ipsum.txt").as_bytes();
 
-pub fn compression_evolution(c: &mut Criterion) {
+pub fn encoding_evolution(c: &mut Criterion) {
     let mut group = c.benchmark_group("encoding evolution");
     group.bench_function("version 1: A giant vec of vecs", |b| {
         b.iter(|| compress::<EncoderVersion1>(LOREM_IPSUM, black_box(7)));
@@ -28,5 +28,5 @@ pub fn compression_evolution(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, compression_evolution);
+criterion_group!(benches, encoding_evolution);
 criterion_main!(benches);
