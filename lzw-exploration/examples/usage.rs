@@ -16,11 +16,14 @@ fn main() {
 }
 
 fn check_string_compression(string: &str) {
-    let my_encoder = salzweg::Encoder::new(7, salzweg::Endianness::LittleEndian);
     let mut compressed = vec![];
-    my_encoder
-        .encode(string.as_bytes(), &mut compressed)
-        .unwrap();
+    salzweg::Encoder::encode(
+        string.as_bytes(),
+        &mut compressed,
+        7,
+        salzweg::Endianness::LittleEndian,
+    )
+    .unwrap();
 
     let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, 7);
     let decompressed = decoder.decode(&compressed).unwrap();
@@ -28,19 +31,17 @@ fn check_string_compression(string: &str) {
     let decompressed_string = String::from_utf8_lossy(&decompressed);
 
     assert_eq!(decompressed_string, string);
-
-    let mut second_compression = vec![];
-    my_encoder
-        .encode(string.as_bytes(), &mut second_compression)
-        .unwrap();
-
-    assert_eq!(compressed, second_compression);
 }
 
 fn check_string_decoding(data: &[u8]) {
-    let my_decoder = salzweg::Decoder::new(7, salzweg::Endianness::LittleEndian);
     let mut my_decompressed = vec![];
-    my_decoder.decode(data, &mut my_decompressed).unwrap();
+    salzweg::Decoder::decode(
+        data,
+        &mut my_decompressed,
+        7,
+        salzweg::Endianness::LittleEndian,
+    )
+    .unwrap();
 
     let mut weezl_decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, 7);
     let weezl_decompressed = weezl_decoder.decode(&data).unwrap();

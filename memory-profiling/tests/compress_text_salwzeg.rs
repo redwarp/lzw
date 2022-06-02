@@ -11,10 +11,13 @@ fn compress_text_salzweg() {
 
     let start_stats = dhat::HeapStats::get();
 
-    let my_encoder = salzweg::Encoder::new(7, salzweg::Endianness::LittleEndian);
-    my_encoder
-        .encode(LOREM_IPSUM_LONG.as_bytes(), &mut compressed)
-        .unwrap();
+    salzweg::Encoder::encode(
+        LOREM_IPSUM_LONG.as_bytes(),
+        &mut compressed,
+        7,
+        salzweg::Endianness::LittleEndian,
+    )
+    .unwrap();
 
     let stats = dhat::HeapStats::get();
 

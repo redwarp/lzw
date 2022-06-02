@@ -12,10 +12,13 @@ fn decompress_text_salzweg() {
 
     let start_stats = dhat::HeapStats::get();
 
-    let my_decoder = salzweg::Decoder::new(7, salzweg::Endianness::LittleEndian);
-    my_decoder
-        .decode(LOREM_IPSUM_LONG_ENCODED, &mut decompressed)
-        .unwrap();
+    salzweg::Decoder::decode(
+        LOREM_IPSUM_LONG_ENCODED,
+        &mut decompressed,
+        7,
+        salzweg::Endianness::LittleEndian,
+    )
+    .unwrap();
 
     let stats = dhat::HeapStats::get();
 

@@ -8,6 +8,3 @@ autobenches = false
 salzweg = { path = "../lzw" }
 weezl = "0.1"
 dhat = "0.3"
-
-[profile.release]
-debug = 1

@@ -12,6 +12,7 @@ use crate::{
 pub enum DecodingError {
     Io(std::io::Error),
     Lzw(&'static str),
+    CodeSize(u8),
 }
 
 impl Display for DecodingError {
@@ -19,6 +20,9 @@ impl Display for DecodingError {
         match self {
             DecodingError::Io(error) => std::fmt::Display::fmt(&error, f),
             DecodingError::Lzw(message) => f.write_str(message),
+            DecodingError::CodeSize(code_size) => f.write_fmt(format_args!(
+                "Code size must be between 2 and 8, was {code_size}",
+            )),
         }
     }
 }
@@ -93,31 +97,44 @@ impl<W: Write> Buffer<W> {
     }
 }
 
-pub struct Decoder {
-    code_size: u8,
-    endianness: Endianness,
-}
+pub struct Decoder {}
 
 impl Decoder {
-    pub fn new(code_size: u8, endianness: Endianness) -> Self {
-        Self {
-            code_size,
-            endianness,
+    pub fn decode<R: Read, W: Write>(
+        data: R,
+        into: W,
+        code_size: u8,
+        endianness: Endianness,
+    ) -> Result<(), DecodingError> {
+        match endianness {
+            Endianness::BigEndian => {
+                Decoder::inner_decode(BigEndianReader::new(data), into, code_size)
+            }
+            Endianness::LittleEndian => {
+                Decoder::inner_decode(LittleEndianReader::new(data), into, code_size)
+            }
         }
     }
 
-    pub fn decode<R: Read, W: Write>(&self, data: R, into: W) -> Result<(), DecodingError> {
-        match self.endianness {
-            Endianness::BigEndian => self.inner_decode(BigEndianReader::new(data), into),
-            Endianness::LittleEndian => self.inner_decode(LittleEndianReader::new(data), into),
-        }
+    pub fn decode_to_vec<R: Read>(
+        data: R,
+        code_size: u8,
+        endianness: Endianness,
+    ) -> Result<Vec<u8>, DecodingError> {
+        let mut output = vec![];
+        Decoder::decode(data, &mut output, code_size, endianness)?;
+        Ok(output)
     }
 
     fn inner_decode<B: BitReader, W: Write>(
-        &self,
         bit_reader: B,
         into: W,
+        code_size: u8,
     ) -> Result<(), DecodingError> {
+        if code_size < 2 && code_size > 8 {
+            return Err(DecodingError::CodeSize(code_size));
+        }
+
         const TABLE_MAX_SIZE: usize = 4096;
         // The stack should be as big as the longest word that the dictionnary can have.
         // The longuest word would be reached if by bad luck, each entry of the dictionnary is made of the
@@ -131,14 +148,14 @@ impl Decoder {
         let mut suffix: [u8; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
         // We will use this stack to decode each string.
         let mut decoding_stack: [u8; STACK_MAX_SIZE] = [0; STACK_MAX_SIZE];
-        for code in 0..1 << self.code_size {
+        for code in 0..1 << code_size {
             suffix[code as usize] = code as u8;
         }
 
         let mut buffer = Buffer::new(into);
-        let mut read_size = self.code_size + 1;
+        let mut read_size = code_size + 1;
 
-        let clear_code = 1 << self.code_size;
+        let clear_code = 1 << code_size;
         let end_of_information = clear_code + 1;
 
         let mut mask = (1 << read_size) - 1;
@@ -153,7 +170,7 @@ impl Decoder {
             let mut code = bit_reader.read(read_size)?;
 
             if code == clear_code {
-                read_size = self.code_size + 1;
+                read_size = code_size + 1;
                 mask = (1 << read_size) - 1;
                 next_index = clear_code + 2;
                 previous_code = None;
@@ -223,10 +240,8 @@ mod tests {
             0x8C, 0x2D, 0x99, 0x87, 0x2A, 0x1C, 0xDC, 0x33, 0xA0, 0x2, 0x55, 0x0,
         ];
 
-        let decoder = Decoder::new(2, Endianness::LittleEndian);
-
         let mut decoded = vec![];
-        decoder.decode(&data[..], &mut decoded).unwrap();
+        Decoder::decode(&data[..], &mut decoded, 2, Endianness::LittleEndian).unwrap();
 
         assert_eq!(
             decoded,
@@ -243,12 +258,10 @@ mod tests {
             0x8C, 0x2D, 0x99, 0x87, 0x2A, 0x1C, 0xDC, 0x33, 0xA0, 0x2, 0x55, 0x0,
         ];
 
-        let decoder = Decoder::new(2, Endianness::LittleEndian);
-
         let mut decoded1 = vec![];
         let mut decoded2 = vec![];
-        decoder.decode(&data[..], &mut decoded1).unwrap();
-        decoder.decode(&data[..], &mut decoded2).unwrap();
+        Decoder::decode(&data[..], &mut decoded1, 2, Endianness::LittleEndian).unwrap();
+        Decoder::decode(&data[..], &mut decoded2, 2, Endianness::LittleEndian).unwrap();
 
         assert_eq!(decoded1, decoded2);
     }
@@ -258,9 +271,8 @@ mod tests {
         let data = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
         let expected = include_bytes!("../../test-assets/lorem_ipsum.txt");
 
-        let decoder = Decoder::new(7, Endianness::LittleEndian);
         let mut decoded = vec![];
-        decoder.decode(&data[..], &mut decoded).unwrap();
+        Decoder::decode(&data[..], &mut decoded, 7, Endianness::LittleEndian).unwrap();
 
         assert_eq!(decoded, expected);
     }

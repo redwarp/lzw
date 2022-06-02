@@ -1,9 +1,37 @@
-use std::io::{Read, Write};
+use std::{
+    fmt::Display,
+    io::{Read, Write},
+};
 
 use crate::{
     io::{BigEndianWriter, BitWriter2, LittleEndianWriter},
     Endianness,
 };
+
+#[derive(Debug)]
+pub enum EncodingError {
+    Io(std::io::Error),
+    CodeSize(u8),
+}
+
+impl Display for EncodingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EncodingError::Io(error) => std::fmt::Display::fmt(&error, f),
+            EncodingError::CodeSize(code_size) => f.write_fmt(format_args!(
+                "Code size must be between 2 and 8, was {code_size}",
+            )),
+        }
+    }
+}
+
+impl std::error::Error for EncodingError {}
+
+impl From<std::io::Error> for EncodingError {
+    fn from(error: std::io::Error) -> Self {
+        EncodingError::Io(error)
+    }
+}
 
 #[derive(Debug, Clone)]
 enum Node {
@@ -77,38 +105,51 @@ impl Tree {
     }
 }
 
-pub struct Encoder {
-    code_size: u8,
-    endianness: Endianness,
-}
+pub struct Encoder {}
 
 impl Encoder {
-    pub fn new(code_size: u8, endianness: Endianness) -> Self {
-        Self {
-            code_size,
-            endianness,
+    pub fn encode<R: Read, W: Write>(
+        data: R,
+        into: W,
+        code_size: u8,
+        endianness: Endianness,
+    ) -> Result<(), EncodingError> {
+        match endianness {
+            Endianness::BigEndian => {
+                Encoder::inner_encode(data, BigEndianWriter::new(into), code_size)
+            }
+            Endianness::LittleEndian => {
+                Encoder::inner_encode(data, LittleEndianWriter::new(into), code_size)
+            }
         }
     }
 
-    pub fn encode<R: Read, W: Write>(&self, data: R, into: W) -> Result<(), std::io::Error> {
-        match self.endianness {
-            Endianness::BigEndian => self.inner_encode(data, BigEndianWriter::new(into)),
-            Endianness::LittleEndian => self.inner_encode(data, LittleEndianWriter::new(into)),
-        }
+    pub fn encode_to_vec<R: Read>(
+        data: R,
+        code_size: u8,
+        endianness: Endianness,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let mut output = vec![];
+        Encoder::encode(data, &mut output, code_size, endianness)?;
+        Ok(output)
     }
 
     fn inner_encode<R: Read, B: BitWriter2>(
-        &self,
         data: R,
         bit_writer: B,
-    ) -> Result<(), std::io::Error> {
+        code_size: u8,
+    ) -> Result<(), EncodingError> {
+        if code_size < 2 && code_size > 8 {
+            return Err(EncodingError::CodeSize(code_size));
+        }
+
         let mut bit_writer = bit_writer;
 
-        let mut write_size = self.code_size + 1;
-        let clear_code = 1 << self.code_size;
-        let end_of_information = (1 << self.code_size) + 1;
+        let mut write_size = code_size + 1;
+        let clear_code = 1 << code_size;
+        let end_of_information = (1 << code_size) + 1;
 
-        let mut tree = Tree::new(self.code_size);
+        let mut tree = Tree::new(code_size);
         tree.reset();
 
         bit_writer.write(write_size, clear_code)?;
@@ -142,7 +183,7 @@ impl Encoder {
 
                     if write_size > 12 {
                         bit_writer.write(12, clear_code)?;
-                        write_size = self.code_size + 1;
+                        write_size = code_size + 1;
                         tree.reset();
                     }
                 }
@@ -157,12 +198,6 @@ impl Encoder {
 
         Ok(())
     }
-
-    pub fn encode_to_vec<R: Read>(&mut self, data: R) -> Result<Vec<u8>, std::io::Error> {
-        let mut output = vec![];
-        self.encode(data, &mut output)?;
-        Ok(output)
-    }
 }
 
 #[cfg(test)]
@@ -176,10 +211,8 @@ mod tests {
             2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
         ];
 
-        let encoder = Encoder::new(2, Endianness::LittleEndian);
-
         let mut compressed = vec![];
-        encoder.encode(&data[..], &mut compressed).unwrap();
+        Encoder::encode(&data[..], &mut compressed, 2, Endianness::LittleEndian).unwrap();
 
         assert_eq!(
             compressed,
@@ -194,10 +227,8 @@ mod tests {
             2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
         ];
 
-        let mut encoder = Encoder::new(2, Endianness::LittleEndian);
-
-        let compression1 = encoder.encode_to_vec(&data[..]).unwrap();
-        let compression2 = encoder.encode_to_vec(&data[..]).unwrap();
+        let compression1 = Encoder::encode_to_vec(&data[..], 2, Endianness::LittleEndian).unwrap();
+        let compression2 = Encoder::encode_to_vec(&data[..], 2, Endianness::LittleEndian).unwrap();
 
         assert_eq!(compression1, compression2);
     }
@@ -207,10 +238,8 @@ mod tests {
         let data = include_bytes!("../../test-assets/lorem_ipsum.txt");
         let expected = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
 
-        let encoder = Encoder::new(7, Endianness::LittleEndian);
-
         let mut compressed = vec![];
-        encoder.encode(&data[..], &mut compressed).unwrap();
+        Encoder::encode(&data[..], &mut compressed, 7, Endianness::LittleEndian).unwrap();
 
         assert_eq!(compressed, expected);
     }

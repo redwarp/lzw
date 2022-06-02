@@ -27,8 +27,13 @@ pub fn encoding_text(c: &mut Criterion) {
     group.bench_function("salzweg", |b| {
         b.iter(|| {
             let mut compressed = vec![];
-            let encoder = salzweg::Encoder::new(black_box(7), salzweg::Endianness::LittleEndian);
-            encoder.encode(LOREM_IPSUM, &mut compressed).unwrap();
+            salzweg::Encoder::encode(
+                LOREM_IPSUM,
+                &mut compressed,
+                black_box(7),
+                salzweg::Endianness::LittleEndian,
+            )
+            .unwrap();
         })
     });
 }
@@ -56,8 +61,13 @@ pub fn encoding_random_data(c: &mut Criterion) {
     group.bench_function("salzweg", |b| {
         b.iter(|| {
             let mut compressed = vec![];
-            let encoder = salzweg::Encoder::new(black_box(8), salzweg::Endianness::LittleEndian);
-            encoder.encode(&data[..], &mut compressed).unwrap();
+            salzweg::Encoder::encode(
+                &data[..],
+                &mut compressed,
+                black_box(8),
+                salzweg::Endianness::LittleEndian,
+            )
+            .unwrap();
         })
     });
 }
@@ -85,8 +95,13 @@ pub fn encoding_image_data(c: &mut Criterion) {
     group.bench_function("salzweg", |b| {
         b.iter(|| {
             let mut compressed = vec![];
-            let encoder = salzweg::Encoder::new(black_box(7), salzweg::Endianness::LittleEndian);
-            encoder.encode(&data[..], &mut compressed).unwrap();
+            salzweg::Encoder::encode(
+                &data[..],
+                &mut compressed,
+                black_box(7),
+                salzweg::Endianness::LittleEndian,
+            )
+            .unwrap();
         })
     });
 }
@@ -102,8 +117,13 @@ pub fn decoding_text(c: &mut Criterion) {
     group.bench_function("salzweg", |b| {
         b.iter(|| {
             let mut decoded = vec![];
-            let decoder = salzweg::Decoder::new(black_box(7), salzweg::Endianness::LittleEndian);
-            decoder.decode(LOREM_IPSUM_ENCODED, &mut decoded).unwrap();
+            salzweg::Decoder::decode(
+                LOREM_IPSUM_ENCODED,
+                &mut decoded,
+                black_box(7),
+                salzweg::Endianness::LittleEndian,
+            )
+            .unwrap();
         })
     });
 }
@@ -121,8 +141,13 @@ pub fn decoding_random_data(c: &mut Criterion) {
     group.bench_function("salzweg", |b| {
         b.iter(|| {
             let mut decoded = vec![];
-            let decoder = salzweg::Decoder::new(black_box(8), salzweg::Endianness::LittleEndian);
-            decoder.decode(&encoded_data[..], &mut decoded).unwrap();
+            salzweg::Decoder::decode(
+                &encoded_data[..],
+                &mut decoded,
+                black_box(8),
+                salzweg::Endianness::LittleEndian,
+            )
+            .unwrap();
         })
     });
 }
@@ -139,8 +164,13 @@ pub fn decoding_image_data(c: &mut Criterion) {
     group.bench_function("salzweg", |b| {
         b.iter(|| {
             let mut decoded = vec![];
-            let decoder = salzweg::Decoder::new(black_box(7), salzweg::Endianness::LittleEndian);
-            decoder.decode(&encoded_data[..], &mut decoded).unwrap();
+            salzweg::Decoder::decode(
+                &encoded_data[..],
+                &mut decoded,
+                black_box(7),
+                salzweg::Endianness::LittleEndian,
+            )
+            .unwrap();
         })
     });
 }
@@ -156,10 +186,9 @@ fn prepare_random_data() -> Vec<u8> {
 fn prepare_encoded_random_data() -> Vec<u8> {
     let data = prepare_random_data();
 
-    let encoder = salzweg::Encoder::new(8, salzweg::Endianness::LittleEndian);
     let mut output = vec![];
 
-    encoder.encode(&data[..], &mut output).unwrap();
+    salzweg::Encoder::encode(&data[..], &mut output, 8, salzweg::Endianness::LittleEndian).unwrap();
     output
 }
 
@@ -179,10 +208,15 @@ fn prepare_image_data() -> Vec<u8> {
 fn prepare_encoded_image_data() -> Vec<u8> {
     let data = prepare_image_data();
 
-    let encoder = salzweg::Encoder::new(7, salzweg::Endianness::LittleEndian);
     let mut compressed = vec![];
 
-    encoder.encode(&data[..], &mut compressed).unwrap();
+    salzweg::Encoder::encode(
+        &data[..],
+        &mut compressed,
+        7,
+        salzweg::Endianness::LittleEndian,
+    )
+    .unwrap();
 
     compressed
 }

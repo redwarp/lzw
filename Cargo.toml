@@ -1,3 +1,6 @@
 [workspace]
 members = ["lzw", "lzw-exploration", "memory-profiling"]
 resolver = "2"
+
+[profile.release.package.memory-profiling]
+debug = 1
