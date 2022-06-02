@@ -35,68 +35,6 @@ impl From<std::io::Error> for DecodingError {
     }
 }
 
-const BUFFER_SIZE: usize = 8096;
-
-struct Buffer<W: Write> {
-    buffer: [u8; BUFFER_SIZE],
-    into: W,
-    count: usize,
-}
-
-impl<W: Write> Buffer<W> {
-    #[inline]
-    fn new(into: W) -> Buffer<W> {
-        Self {
-            buffer: [0; BUFFER_SIZE],
-            into,
-            count: 0,
-        }
-    }
-
-    #[allow(dead_code)]
-    fn write_all(&mut self, data: &[u8]) -> Result<(), std::io::Error> {
-        let remaining = self.remaining();
-        if remaining >= data.len() {
-            self.buffer[self.count..self.count + data.len()].copy_from_slice(data);
-            self.count += data.len();
-        } else {
-            self.buffer[self.count..].copy_from_slice(&data[..remaining]);
-            self.into.write_all(&self.buffer)?;
-            self.buffer[..data.len() - remaining].copy_from_slice(&data[remaining..]);
-            self.count = data.len() - remaining
-        }
-        Ok(())
-    }
-
-    fn write(&mut self, data: u8) -> Result<(), std::io::Error> {
-        if self.remaining() != 0 {
-            self.buffer[self.count] = data;
-            self.count += 1;
-        } else {
-            self.into.write_all(&self.buffer)?;
-            self.buffer[0] = data;
-            self.count = 1;
-        }
-
-        Ok(())
-    }
-
-    fn flush(&mut self) -> Result<(), std::io::Error> {
-        if self.count == 0 {
-            return Ok(());
-        }
-
-        self.into.write_all(&self.buffer[..self.count])?;
-        self.count = 0;
-        Ok(())
-    }
-
-    #[inline]
-    fn remaining(&self) -> usize {
-        BUFFER_SIZE - self.count
-    }
-}
-
 pub struct Decoder {}
 
 impl Decoder {
@@ -134,6 +72,7 @@ impl Decoder {
         if code_size < 2 && code_size > 8 {
             return Err(DecodingError::CodeSize(code_size));
         }
+        let mut into = into;
 
         const TABLE_MAX_SIZE: usize = 4096;
         // The stack should be as big as the longest word that the dictionnary can have.
@@ -148,11 +87,11 @@ impl Decoder {
         let mut suffix: [u8; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
         // We will use this stack to decode each string.
         let mut decoding_stack: [u8; STACK_MAX_SIZE] = [0; STACK_MAX_SIZE];
+        // We prefill our dictionnary with all the known values;
         for code in 0..1 << code_size {
             suffix[code as usize] = code as u8;
         }
 
-        let mut buffer = Buffer::new(into);
         let mut read_size = code_size + 1;
 
         let clear_code = 1 << code_size;
@@ -166,7 +105,7 @@ impl Decoder {
         let mut previous_code: Option<u16> = None;
         let mut bit_reader = bit_reader;
 
-        'read_loop: loop {
+        loop {
             let mut code = bit_reader.read(read_size)?;
 
             if code == clear_code {
@@ -176,9 +115,9 @@ impl Decoder {
                 previous_code = None;
                 continue;
             } else if code == end_of_information {
-                break 'read_loop;
+                break;
             } else if previous_code == None {
-                buffer.write(suffix[code as usize])?;
+                into.write_all(&[suffix[code as usize]])?;
                 previous_code = Some(code);
                 first_char = code as u8;
                 continue;
@@ -187,12 +126,14 @@ impl Decoder {
             let initial_code = code;
 
             if code >= next_index {
-                // New word!
+                // New word! It will end with the first character of
+                // the previously decoded string.
                 decoding_stack[stack_top] = first_char;
                 stack_top += 1;
                 code = previous_code.unwrap();
             }
 
+            // We assemble the string char by char.
             while code >= clear_code {
                 decoding_stack[stack_top] = suffix[code as usize];
                 stack_top += 1;
@@ -200,11 +141,12 @@ impl Decoder {
             }
 
             first_char = code as u8;
-            buffer.write(first_char)?;
+            into.write_all(&[first_char])?;
 
+            // We unpile the stack into the output, recreating the string.
             while stack_top > 0 {
                 stack_top -= 1;
-                buffer.write(decoding_stack[stack_top])?;
+                into.write_all(&[decoding_stack[stack_top]])?;
             }
 
             if next_index < TABLE_MAX_SIZE as u16 {
@@ -223,7 +165,7 @@ impl Decoder {
             previous_code = Some(initial_code);
         }
 
-        buffer.flush()?;
+        into.flush()?;
 
         Ok(())
     }
@@ -275,74 +217,5 @@ mod tests {
         Decoder::decode(&data[..], &mut decoded, 7, Endianness::LittleEndian).unwrap();
 
         assert_eq!(decoded, expected);
-    }
-
-    #[test]
-    fn buffer_write_more_than_can_chew() {
-        let mut into = vec![];
-        let mut buffer = Buffer::new(&mut into);
-
-        let data = vec![10; 10000];
-        buffer.write_all(&data).unwrap();
-        buffer.flush().unwrap();
-
-        assert_eq!(into.len(), 10000);
-    }
-
-    #[test]
-    fn buffer_overflow_with_two_slices() {
-        let mut into = vec![];
-        let mut buffer = Buffer::new(&mut into);
-
-        let data = vec![10; 10000];
-        buffer.write_all(&data[..5000]).unwrap();
-        buffer.write_all(&data[5000..]).unwrap();
-        buffer.flush().unwrap();
-
-        assert_eq!(into.len(), 10000);
-    }
-
-    #[test]
-    fn buffer_write_one_by_one() {
-        let mut into = vec![];
-        let mut buffer = Buffer::new(&mut into);
-
-        let data = vec![0; 10000];
-
-        for i in 0..10000 {
-            buffer.write_all(&data[i..i + 1]).unwrap();
-        }
-
-        buffer.flush().unwrap();
-
-        assert_eq!(into.len(), 10000);
-    }
-
-    #[test]
-    fn buffer_flush() {
-        let mut into = vec![];
-        let data = vec![0; 50];
-
-        let mut buffer = Buffer::new(&mut into);
-        buffer.write_all(&data).unwrap();
-        assert_eq!(into.len(), 0);
-
-        let mut buffer = Buffer::new(&mut into);
-        buffer.write_all(&data).unwrap();
-        buffer.flush().unwrap();
-        assert_eq!(into.len(), 50);
-    }
-
-    #[test]
-    fn buffer_flush_multiple() {
-        let mut into = vec![];
-        let data = vec![0; 50];
-
-        let mut buffer = Buffer::new(&mut into);
-        buffer.write_all(&data).unwrap();
-        buffer.flush().unwrap();
-        buffer.write_all(&data).unwrap();
-        buffer.flush().unwrap();
-        assert_eq!(into.len(), 100);
     }
 }

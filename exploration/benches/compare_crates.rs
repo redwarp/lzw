@@ -1,4 +1,4 @@
-use std::{fs::File, path::Path};
+use std::{fs::File, io::BufWriter, path::Path};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
@@ -175,6 +175,62 @@ pub fn decoding_image_data(c: &mut Criterion) {
     });
 }
 
+pub fn decoding_to_file(c: &mut Criterion) {
+    let encoded_data = prepare_encoded_image_data();
+
+    let mut group = c.benchmark_group("decoding to file");
+    group.bench_function("weezl", |b| {
+        b.iter(|| {
+            let output = BufWriter::new(tempfile::tempfile().unwrap());
+            let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(7));
+            decoder
+                .into_stream(output)
+                .decode(&encoded_data[..])
+                .status
+                .unwrap();
+        })
+    });
+    group.bench_function("salzweg", |b| {
+        b.iter(|| {
+            let output = BufWriter::new(tempfile::tempfile().unwrap());
+            salzweg::Decoder::decode(
+                &encoded_data[..],
+                output,
+                black_box(7),
+                salzweg::Endianness::LittleEndian,
+            )
+            .unwrap();
+        })
+    });
+}
+
+pub fn decoding_to_vec(c: &mut Criterion) {
+    let encoded_data = prepare_encoded_image_data();
+
+    let mut group = c.benchmark_group("decoding to vec");
+    group.bench_function("weezl", |b| {
+        b.iter(|| {
+            let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(7));
+            decoder
+                .into_stream(vec![])
+                .decode(&encoded_data[..])
+                .status
+                .unwrap();
+        })
+    });
+    group.bench_function("salzweg", |b| {
+        b.iter(|| {
+            salzweg::Decoder::decode(
+                &encoded_data[..],
+                vec![],
+                black_box(7),
+                salzweg::Endianness::LittleEndian,
+            )
+            .unwrap();
+        })
+    });
+}
+
 fn prepare_random_data() -> Vec<u8> {
     let mut rand = StdRng::seed_from_u64(42);
     let mut data: Vec<u8> = vec![0; 1 << 16];
@@ -222,6 +278,8 @@ criterion_group!(
     encoding_image_data,
     decoding_text,
     decoding_random_data,
-    decoding_image_data
+    decoding_image_data,
+    decoding_to_file,
+    decoding_to_vec
 );
 criterion_main!(benches);

@@ -14,6 +14,7 @@ lzw = "0.10"
 weezl = "0.1"
 rand = "0.8"
 png = "0.17"
+tempfile = "3.3"
 
 [[bench]]
 name = "compare_crates"

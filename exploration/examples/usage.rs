@@ -5,7 +5,6 @@ const LOREM_IPSUM_LONG_ENCODED: &[u8] =
     include_bytes!("../../test-assets/lorem_ipsum_long_encoded.bin");
 
 /// See https://www.eecis.udel.edu/~amer/CISC651/lzw.and.gif.explained.html
-/// Use https://crates.io/crates/bitstream-io for bit packing?
 /// Rust example https://rosettacode.org/wiki/LZW_compression#Rust
 fn main() {
     check_string_compression(LOREM_IPSUM);
