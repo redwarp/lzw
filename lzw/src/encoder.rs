@@ -79,21 +79,18 @@ impl Tree {
 
 pub struct Encoder {
     code_size: u8,
-    string_table: Tree,
     endianness: Endianness,
 }
 
 impl Encoder {
     pub fn new(code_size: u8, endianness: Endianness) -> Self {
-        let string_table = Tree::new(code_size);
         Self {
             code_size,
-            string_table,
             endianness,
         }
     }
 
-    pub fn encode<R: Read, W: Write>(&mut self, data: R, into: W) -> Result<(), std::io::Error> {
+    pub fn encode<R: Read, W: Write>(&self, data: R, into: W) -> Result<(), std::io::Error> {
         match self.endianness {
             Endianness::BigEndian => self.inner_encode(data, BigEndianWriter::new(into)),
             Endianness::LittleEndian => self.inner_encode(data, LittleEndianWriter::new(into)),
@@ -101,7 +98,7 @@ impl Encoder {
     }
 
     fn inner_encode<R: Read, B: BitWriter2>(
-        &mut self,
+        &self,
         data: R,
         bit_writer: B,
     ) -> Result<(), std::io::Error> {
@@ -111,7 +108,7 @@ impl Encoder {
         let clear_code = 1 << self.code_size;
         let end_of_information = (1 << self.code_size) + 1;
 
-        let tree = &mut self.string_table;
+        let mut tree = Tree::new(self.code_size);
         tree.reset();
 
         bit_writer.write(write_size, clear_code)?;
@@ -179,7 +176,7 @@ mod tests {
             2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
         ];
 
-        let mut encoder = Encoder::new(2, Endianness::LittleEndian);
+        let encoder = Encoder::new(2, Endianness::LittleEndian);
 
         let mut compressed = vec![];
         encoder.encode(&data[..], &mut compressed).unwrap();
@@ -210,7 +207,7 @@ mod tests {
         let data = include_bytes!("../../test-assets/lorem_ipsum.txt");
         let expected = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
 
-        let mut encoder = Encoder::new(7, Endianness::LittleEndian);
+        let encoder = Encoder::new(7, Endianness::LittleEndian);
 
         let mut compressed = vec![];
         encoder.encode(&data[..], &mut compressed).unwrap();

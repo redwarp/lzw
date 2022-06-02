@@ -1,0 +1,13 @@
+[package]
+name = "memory-profiling"
+version = "0.1.0"
+edition = "2021"
+autobenches = false
+
+[dependencies]
+salzweg = { path = "../lzw" }
+weezl = "0.1"
+dhat = "0.3"
+
+[profile.release]
+debug = 1

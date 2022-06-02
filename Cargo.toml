@@ -1,3 +1,3 @@
 [workspace]
-members = ["lzw", "lzw-exploration"]
+members = ["lzw", "lzw-exploration", "memory-profiling"]
 resolver = "2"

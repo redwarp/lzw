@@ -1,8 +1,3 @@
-use std::{fs::File, path::Path};
-
-use rand::{prelude::StdRng, RngCore, SeedableRng};
-use salzweg::Encoder;
-
 const LOREM_IPSUM: &str = include_str!("../../test-assets/lorem_ipsum.txt");
 const LOREM_IPSUM_LONG: &str = include_str!("../../test-assets/lorem_ipsum_long.txt");
 const LOREM_IPSUM_ENCODED: &[u8] = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
@@ -18,14 +13,10 @@ fn main() {
     check_string_decoding(LOREM_IPSUM_ENCODED);
     check_string_decoding(LOREM_IPSUM_LONG_ENCODED);
     decode_colors();
-    calculate_max_stack();
-
-    image_data();
-    compressed_image_data();
 }
 
 fn check_string_compression(string: &str) {
-    let mut my_encoder = salzweg::Encoder::new(7, salzweg::Endianness::LittleEndian);
+    let my_encoder = salzweg::Encoder::new(7, salzweg::Endianness::LittleEndian);
     let mut compressed = vec![];
     my_encoder
         .encode(string.as_bytes(), &mut compressed)
@@ -47,7 +38,7 @@ fn check_string_compression(string: &str) {
 }
 
 fn check_string_decoding(data: &[u8]) {
-    let mut my_decoder = salzweg::Decoder::new(7, salzweg::Endianness::LittleEndian);
+    let my_decoder = salzweg::Decoder::new(7, salzweg::Endianness::LittleEndian);
     let mut my_decompressed = vec![];
     my_decoder.decode(data, &mut my_decompressed).unwrap();
 
@@ -73,39 +64,4 @@ fn decode_colors() {
             2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
         ]
     );
-}
-
-// How big should the stack be?
-fn calculate_max_stack() {
-    let dict_max_size = 4096;
-    let max_free = dict_max_size - ((1 << 2) + 2);
-
-    println!("Max length of word is {}", max_free + 1);
-
-    let max = 4096 - (1 << 2) - 1;
-    println!("Max stack = {max}");
-}
-
-fn image_data() -> Vec<u8> {
-    let image = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .join("test-assets/tokyo_128_colors.png");
-
-    let png_decoder = png::Decoder::new(File::open(image).unwrap());
-    let mut reader = png_decoder.read_info().unwrap();
-    let mut buf = vec![0; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut buf).unwrap();
-    buf[..info.buffer_size()].to_vec()
-}
-
-fn compressed_image_data() -> Vec<u8> {
-    let data = image_data();
-
-    let mut encoder = Encoder::new(7, salzweg::Endianness::LittleEndian);
-    let mut compressed = vec![];
-
-    encoder.encode(&data[..], &mut compressed).unwrap();
-
-    compressed
 }

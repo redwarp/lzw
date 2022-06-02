@@ -106,7 +106,7 @@ impl Decoder {
         }
     }
 
-    pub fn decode<R: Read, W: Write>(&mut self, data: R, into: W) -> Result<(), DecodingError> {
+    pub fn decode<R: Read, W: Write>(&self, data: R, into: W) -> Result<(), DecodingError> {
         match self.endianness {
             Endianness::BigEndian => self.inner_decode(BigEndianReader::new(data), into),
             Endianness::LittleEndian => self.inner_decode(LittleEndianReader::new(data), into),
@@ -114,7 +114,7 @@ impl Decoder {
     }
 
     fn inner_decode<B: BitReader, W: Write>(
-        &mut self,
+        &self,
         bit_reader: B,
         into: W,
     ) -> Result<(), DecodingError> {
@@ -223,7 +223,7 @@ mod tests {
             0x8C, 0x2D, 0x99, 0x87, 0x2A, 0x1C, 0xDC, 0x33, 0xA0, 0x2, 0x55, 0x0,
         ];
 
-        let mut decoder = Decoder::new(2, Endianness::LittleEndian);
+        let decoder = Decoder::new(2, Endianness::LittleEndian);
 
         let mut decoded = vec![];
         decoder.decode(&data[..], &mut decoded).unwrap();
@@ -243,7 +243,7 @@ mod tests {
             0x8C, 0x2D, 0x99, 0x87, 0x2A, 0x1C, 0xDC, 0x33, 0xA0, 0x2, 0x55, 0x0,
         ];
 
-        let mut decoder = Decoder::new(2, Endianness::LittleEndian);
+        let decoder = Decoder::new(2, Endianness::LittleEndian);
 
         let mut decoded1 = vec![];
         let mut decoded2 = vec![];
@@ -258,7 +258,7 @@ mod tests {
         let data = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
         let expected = include_bytes!("../../test-assets/lorem_ipsum.txt");
 
-        let mut decoder = Decoder::new(7, Endianness::LittleEndian);
+        let decoder = Decoder::new(7, Endianness::LittleEndian);
         let mut decoded = vec![];
         decoder.decode(&data[..], &mut decoded).unwrap();
 
