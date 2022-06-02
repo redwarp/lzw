@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    io::{BigEndianWriter, BitWriter2, LittleEndianWriter},
+    io::{BigEndianWriter, BitWriter, LittleEndianWriter},
     Endianness,
 };
 
@@ -134,7 +134,7 @@ impl Encoder {
         Ok(output)
     }
 
-    fn inner_encode<R: Read, B: BitWriter2>(
+    fn inner_encode<R: Read, B: BitWriter>(
         data: R,
         bit_writer: B,
         code_size: u8,

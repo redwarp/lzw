@@ -99,7 +99,7 @@ where
     }
 }
 
-pub trait BitWriter2 {
+pub trait BitWriter {
     fn write(&mut self, amount: u8, data: u16) -> Result<(), std::io::Error>;
 
     fn fill(&mut self) -> Result<(), std::io::Error>;
@@ -131,7 +131,7 @@ where
     }
 }
 
-impl<W> BitWriter2 for LittleEndianWriter<W>
+impl<W> BitWriter for LittleEndianWriter<W>
 where
     W: Write,
 {
@@ -190,7 +190,7 @@ where
     }
 }
 
-impl<W> BitWriter2 for BigEndianWriter<W>
+impl<W> BitWriter for BigEndianWriter<W>
 where
     W: Write,
 {
