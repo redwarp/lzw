@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufWriter, path::Path};
+use std::{fs::File, path::Path};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
@@ -175,35 +175,6 @@ pub fn decoding_image_data(c: &mut Criterion) {
     });
 }
 
-pub fn decoding_to_file(c: &mut Criterion) {
-    let encoded_data = prepare_encoded_image_data();
-
-    let mut group = c.benchmark_group("decoding to file");
-    group.bench_function("weezl", |b| {
-        b.iter(|| {
-            let output = BufWriter::new(tempfile::tempfile().unwrap());
-            let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(7));
-            decoder
-                .into_stream(output)
-                .decode(&encoded_data[..])
-                .status
-                .unwrap();
-        })
-    });
-    group.bench_function("salzweg", |b| {
-        b.iter(|| {
-            let output = BufWriter::new(tempfile::tempfile().unwrap());
-            salzweg::Decoder::decode(
-                &encoded_data[..],
-                output,
-                black_box(7),
-                salzweg::Endianness::LittleEndian,
-            )
-            .unwrap();
-        })
-    });
-}
-
 pub fn decoding_to_vec(c: &mut Criterion) {
     let encoded_data = prepare_encoded_image_data();
 
@@ -279,7 +250,6 @@ criterion_group!(
     decoding_text,
     decoding_random_data,
     decoding_image_data,
-    decoding_to_file,
     decoding_to_vec
 );
 criterion_main!(benches);
