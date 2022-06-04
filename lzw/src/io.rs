@@ -35,6 +35,7 @@ impl<R> BitReader for LittleEndianReader<R>
 where
     R: Read,
 {
+    #[inline]
     fn read(&mut self, amount: u8) -> Result<u16, std::io::Error> {
         while self.cursor < amount {
             self.read.read_exact(&mut self.read_buffer[..])?;
@@ -81,6 +82,7 @@ impl<R> BitReader for BigEndianReader<R>
 where
     R: Read,
 {
+    #[inline]
     fn read(&mut self, amount: u8) -> Result<u16, std::io::Error> {
         while self.cursor < amount {
             self.read.read_exact(&mut self.read_buffer[..])?;
@@ -135,6 +137,7 @@ impl<W> BitWriter for LittleEndianWriter<W>
 where
     W: Write,
 {
+    #[inline]
     fn write(&mut self, amount: u8, data: u16) -> Result<(), std::io::Error> {
         let mask = (1 << amount) - 1;
         self.byte_buffer |= (data as u32 & mask) << self.cursor;
@@ -151,6 +154,7 @@ where
         Ok(())
     }
 
+    #[inline]
     fn fill(&mut self) -> Result<(), std::io::Error> {
         if self.cursor > 0 {
             self.write.write_all(&[self.byte_buffer as u8])?;
@@ -161,6 +165,7 @@ where
         Ok(())
     }
 
+    #[inline]
     fn flush(&mut self) -> Result<(), std::io::Error> {
         self.write.flush()
     }
@@ -194,6 +199,7 @@ impl<W> BitWriter for BigEndianWriter<W>
 where
     W: Write,
 {
+    #[inline]
     fn write(&mut self, amount: u8, data: u16) -> Result<(), std::io::Error> {
         let mask = (1 << amount) - 1;
         let shift = 32 - amount - self.cursor;
@@ -211,6 +217,7 @@ where
         Ok(())
     }
 
+    #[inline]
     fn fill(&mut self) -> Result<(), std::io::Error> {
         if self.cursor > 0 {
             self.write.write_all(&[(self.byte_buffer >> 24) as u8])?;
@@ -221,6 +228,7 @@ where
         Ok(())
     }
 
+    #[inline]
     fn flush(&mut self) -> Result<(), std::io::Error> {
         self.write.flush()
     }
