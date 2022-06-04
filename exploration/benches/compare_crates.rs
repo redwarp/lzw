@@ -1,4 +1,4 @@
-use std::{fs::File, path::Path};
+use std::{fs::File, io::Write, path::Path};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
@@ -98,103 +98,51 @@ pub fn encoding_image_data(c: &mut Criterion) {
 }
 
 pub fn decoding_text(c: &mut Criterion) {
-    let mut group = c.benchmark_group("decoding text");
-    group.bench_function("weezl", |b| {
-        b.iter(|| {
-            let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(7));
-            decoder
-                .into_stream(std::io::sink())
-                .decode(LOREM_IPSUM_ENCODED)
-                .status
-                .unwrap();
-        })
-    });
-    group.bench_function("salzweg", |b| {
-        b.iter(|| {
-            salzweg::Decoder::decode(
-                LOREM_IPSUM_ENCODED,
-                std::io::sink(),
-                black_box(7),
-                salzweg::Endianness::LittleEndian,
-            )
-            .unwrap();
-        })
+    decoding_bench(c, "decoding text", LOREM_IPSUM_ENCODED, 7, || {
+        std::io::sink()
     });
 }
 
 pub fn decoding_random_data(c: &mut Criterion) {
     let encoded_data = prepare_encoded_random_data();
 
-    let mut group = c.benchmark_group("decoding random data");
-    group.bench_function("weezl", |b| {
-        b.iter(|| {
-            let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(8));
-            decoder
-                .into_stream(std::io::sink())
-                .decode(&encoded_data[..])
-                .status
-                .unwrap();
-        })
-    });
-    group.bench_function("salzweg", |b| {
-        b.iter(|| {
-            salzweg::Decoder::decode(
-                &encoded_data[..],
-                std::io::sink(),
-                black_box(8),
-                salzweg::Endianness::LittleEndian,
-            )
-            .unwrap();
-        })
+    decoding_bench(c, "decoding random data", &encoded_data, 8, || {
+        std::io::sink()
     });
 }
 pub fn decoding_image_data(c: &mut Criterion) {
     let encoded_data = prepare_encoded_image_data();
 
-    let mut group = c.benchmark_group("decoding image data");
-    group.bench_function("weezl", |b| {
-        b.iter(|| {
-            let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(7));
-            decoder
-                .into_stream(std::io::sink())
-                .decode(&encoded_data[..])
-                .status
-                .unwrap();
-        })
-    });
-    group.bench_function("salzweg", |b| {
-        b.iter(|| {
-            salzweg::Decoder::decode(
-                &encoded_data[..],
-                std::io::sink(),
-                black_box(7),
-                salzweg::Endianness::LittleEndian,
-            )
-            .unwrap();
-        })
+    decoding_bench(c, "decoding image data", &encoded_data, 7, || {
+        std::io::sink()
     });
 }
 
-pub fn decoding_to_vec(c: &mut Criterion) {
+pub fn decoding_image_to_vec(c: &mut Criterion) {
     let encoded_data = prepare_encoded_image_data();
 
-    let mut group = c.benchmark_group("decoding to vec");
+    decoding_bench(c, "decoding image to vec", &encoded_data, 7, || vec![]);
+}
+
+fn decoding_bench<F, W>(c: &mut Criterion, name: &str, data: &[u8], code_size: u8, into: F)
+where
+    F: 'static + FnOnce() -> W + Copy,
+    W: Write,
+{
+    let mut group = c.benchmark_group(name);
     group.bench_function("weezl", |b| {
         b.iter(|| {
-            let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(7));
-            decoder
-                .into_stream(vec![])
-                .decode(&encoded_data[..])
-                .status
-                .unwrap();
+            let mut decoder =
+                weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(code_size));
+            decoder.into_stream(into()).decode(data).status.unwrap();
         })
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
             salzweg::Decoder::decode(
-                &encoded_data[..],
-                vec![],
-                black_box(7),
+                data,
+                into(),
+                black_box(code_size),
                 salzweg::Endianness::LittleEndian,
             )
             .unwrap();
@@ -204,7 +152,7 @@ pub fn decoding_to_vec(c: &mut Criterion) {
 
 fn prepare_random_data() -> Vec<u8> {
     let mut rand = StdRng::seed_from_u64(42);
-    let mut data: Vec<u8> = vec![0; 1 << 16];
+    let mut data: Vec<u8> = vec![0; 1 << 20];
     rand.fill_bytes(&mut data[..]);
 
     data
@@ -219,6 +167,8 @@ fn prepare_encoded_random_data() -> Vec<u8> {
     output
 }
 
+/// This actually prepare a vec of values in 0..128. It works because the image, a png with 128 colors,
+/// has been reduced with oxipng, and is now a png with indexed colors.
 fn prepare_image_data() -> Vec<u8> {
     let image = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -250,6 +200,6 @@ criterion_group!(
     decoding_text,
     decoding_random_data,
     decoding_image_data,
-    decoding_to_vec
+    decoding_image_to_vec
 );
 criterion_main!(benches);

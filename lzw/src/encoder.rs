@@ -33,6 +33,16 @@ impl From<std::io::Error> for EncodingError {
     }
 }
 
+impl PartialEq for EncodingError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Io(l0), Self::Io(r0)) => l0.kind() == r0.kind(),
+            (Self::CodeSize(l0), Self::CodeSize(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 enum Node {
     NoChild,
@@ -139,7 +149,7 @@ impl Encoder {
         bit_writer: B,
         code_size: u8,
     ) -> Result<(), EncodingError> {
-        if code_size < 2 && code_size > 8 {
+        if code_size < 2 || code_size > 8 {
             return Err(EncodingError::CodeSize(code_size));
         }
 
@@ -242,5 +252,16 @@ mod tests {
         Encoder::encode(&data[..], &mut compressed, 7, Endianness::LittleEndian).unwrap();
 
         assert_eq!(compressed, expected);
+    }
+
+    #[test]
+    fn unsupported_code_size() {
+        let data = [0];
+        let into = vec![];
+
+        let result = Encoder::encode(&data[..], into, 10, Endianness::LittleEndian).err();
+        let expected = Some(EncodingError::CodeSize(10));
+
+        assert_eq!(expected, result);
     }
 }

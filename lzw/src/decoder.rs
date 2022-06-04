@@ -35,6 +35,16 @@ impl From<std::io::Error> for DecodingError {
     }
 }
 
+impl PartialEq for DecodingError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Io(l0), Self::Io(r0)) => l0.kind() == r0.kind(),
+            (Self::Lzw(l0), Self::Lzw(r0)) => l0 == r0,
+            (Self::CodeSize(l0), Self::CodeSize(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
+}
 pub struct Decoder {}
 
 impl Decoder {
@@ -69,7 +79,7 @@ impl Decoder {
         into: W,
         code_size: u8,
     ) -> Result<(), DecodingError> {
-        if code_size < 2 && code_size > 8 {
+        if code_size < 2 || code_size > 8 {
             return Err(DecodingError::CodeSize(code_size));
         }
         let mut into = into;
@@ -82,14 +92,17 @@ impl Decoder {
         // In effect, stack max size = 4096 - 2^2 - 2 entries for clear and EOF + 1.
         const STACK_MAX_SIZE: usize = 4091;
         // In effect, our prefix and suffix is our decoding table, as each word can be expressed by a previous
-        // code (prefix), and the extra letter (suffix).
+        // code (prefix), and the extra letter (suffix). We store the word length as well, it's useful
+        // to recreate the word stack.
         let mut prefix: [u16; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
         let mut suffix: [u8; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
+        let mut length: [usize; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
         // We will use this stack to decode each string.
         let mut decoding_stack: [u8; STACK_MAX_SIZE] = [0; STACK_MAX_SIZE];
         // We prefill our dictionnary with all the known values;
         for code in 0..1 << code_size {
             suffix[code as usize] = code as u8;
+            length[code as usize] = 1;
         }
 
         let mut read_size = code_size + 1;
@@ -99,11 +112,9 @@ impl Decoder {
 
         let mut mask = (1 << read_size) - 1;
         let mut next_index = clear_code + 2;
-        let mut stack_top = 0;
-        let mut first_char = 0;
-
         let mut previous_code: Option<u16> = None;
         let mut bit_reader = bit_reader;
+        let mut word_length = 0;
 
         loop {
             let mut code = bit_reader.read(read_size)?;
@@ -119,39 +130,41 @@ impl Decoder {
             } else if previous_code == None {
                 into.write_all(&[suffix[code as usize]])?;
                 previous_code = Some(code);
-                first_char = code as u8;
+                decoding_stack[0] = code as u8;
+                word_length = 1;
                 continue;
             }
 
             let initial_code = code;
 
-            if code >= next_index {
-                // New word! It will end with the first character of
-                // the previously decoded string.
-                decoding_stack[stack_top] = first_char;
-                stack_top += 1;
-                code = previous_code.unwrap();
+            if code > next_index {
+                return Err(DecodingError::Lzw("Unexpected code while decoding."));
+            } else if code == next_index {
+                // New word! It correspond to the last decoded word,
+                // plus the first char of the previously decoded word.
+                decoding_stack[word_length] = decoding_stack[0];
+                // The word length is the length of the previous word, plus one.
+                word_length = word_length + 1;
+            } else {
+                word_length = length[code as usize];
+                let mut stack_top = word_length;
+
+                // We assemble the string char by char.
+                while code >= clear_code {
+                    stack_top -= 1;
+                    decoding_stack[stack_top] = suffix[code as usize];
+                    code = prefix[code as usize]
+                }
+
+                decoding_stack[0] = code as u8;
             }
 
-            // We assemble the string char by char.
-            while code >= clear_code {
-                decoding_stack[stack_top] = suffix[code as usize];
-                stack_top += 1;
-                code = prefix[code as usize]
-            }
-
-            first_char = code as u8;
-            into.write_all(&[first_char])?;
-
-            // We unpile the stack into the output, recreating the string.
-            while stack_top > 0 {
-                stack_top -= 1;
-                into.write_all(&[decoding_stack[stack_top]])?;
-            }
+            into.write_all(&decoding_stack[0..word_length])?;
 
             if next_index < TABLE_MAX_SIZE as u16 {
                 prefix[next_index as usize] = previous_code.unwrap();
-                suffix[next_index as usize] = first_char;
+                suffix[next_index as usize] = decoding_stack[0];
+                length[next_index as usize] = length[previous_code.unwrap() as usize] + 1;
                 next_index += 1;
                 if next_index & mask == 0 && next_index < TABLE_MAX_SIZE as u16 {
                     read_size += 1;
@@ -217,5 +230,16 @@ mod tests {
         Decoder::decode(&data[..], &mut decoded, 7, Endianness::LittleEndian).unwrap();
 
         assert_eq!(decoded, expected);
+    }
+
+    #[test]
+    fn unsupported_code_size() {
+        let data = [0];
+        let into = vec![];
+
+        let result = Decoder::decode(&data[..], into, 10, Endianness::LittleEndian).err();
+        let expected = Some(DecodingError::CodeSize(10));
+
+        assert_eq!(expected, result);
     }
 }
