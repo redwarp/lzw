@@ -5,6 +5,8 @@ use rand::{prelude::StdRng, RngCore, SeedableRng};
 
 const LOREM_IPSUM: &[u8] = include_str!("../../test-assets/lorem_ipsum_long.txt").as_bytes();
 const LOREM_IPSUM_ENCODED: &[u8] = include_bytes!("../../test-assets/lorem_ipsum_long_encoded.bin");
+const LOREM_IPSUM_ENCODED_BE: &[u8] =
+    include_bytes!("../../test-assets/lorem_ipsum_long_encoded_be.bin");
 
 pub fn encoding_text(c: &mut Criterion) {
     let mut group = c.benchmark_group("encoding text");
@@ -124,6 +126,31 @@ pub fn decoding_image_to_vec(c: &mut Criterion) {
     decoding_bench(c, "decoding image to vec", &encoded_data, 7, || vec![]);
 }
 
+pub fn decoding_text_to_vec_be(c: &mut Criterion) {
+    let mut group = c.benchmark_group("decoding text to vec be");
+    group.bench_function("weezl", |b| {
+        b.iter(|| {
+            let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Msb, black_box(7));
+            decoder
+                .into_stream(vec![])
+                .decode(LOREM_IPSUM_ENCODED_BE)
+                .status
+                .unwrap();
+        })
+    });
+    group.bench_function("salzweg", |b| {
+        b.iter(|| {
+            salzweg::Decoder::decode(
+                LOREM_IPSUM_ENCODED_BE,
+                vec![],
+                black_box(7),
+                salzweg::Endianness::BigEndian,
+            )
+            .unwrap();
+        })
+    });
+}
+
 fn decoding_bench<F, W>(c: &mut Criterion, name: &str, data: &[u8], code_size: u8, into: F)
 where
     F: 'static + FnOnce() -> W + Copy,
@@ -200,6 +227,7 @@ criterion_group!(
     decoding_text,
     decoding_random_data,
     decoding_image_data,
-    decoding_image_to_vec
+    decoding_image_to_vec,
+    decoding_text_to_vec_be
 );
 criterion_main!(benches);
