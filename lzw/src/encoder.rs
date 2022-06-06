@@ -8,9 +8,14 @@ use crate::{
     Endianness,
 };
 
+/// The error type for encoding operations.
+///
+/// Encapsulate [std::io::Error] and expose LZW code size or unexpected data issues.
 #[derive(Debug)]
 pub enum EncodingError {
+    /// An I/O error happend when reading or writing data.
     Io(std::io::Error),
+    /// Code size out of bounds.
     CodeSize(u8),
 }
 
@@ -105,9 +110,37 @@ impl Tree {
     }
 }
 
+/// LZW encoder
 pub struct Encoder {}
 
 impl Encoder {
+    /// Encode lzw, with variable code size.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be compressed.
+    /// * `into` - The output where compressed data should be written.
+    /// * `code_size` - Between 2 and 8, the initial code size to use.
+    ///   Initial code size correspond to the range of expected data.
+    ///   For example, let's say we are compressing an ASCII string.
+    ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
+    /// * `endianess` - Bit ordering when writing compressed data.
+    ///
+    /// # Usage
+    /// ```
+    /// use salzweg::{Encoder, Endianness, EncodingError};
+    ///
+    /// fn main() -> Result<(), EncodingError> {
+    ///     let data = vec![0, 0, 1, 3];
+    ///     let mut output = vec![];
+    ///
+    ///     Encoder::encode(&data[..], &mut output, 2, Endianness::LittleEndian)?;
+    ///
+    ///     assert_eq!(output, [0x04, 0x32, 0x05,]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn encode<R: Read, W: Write>(
         data: R,
         into: W,
@@ -124,6 +157,31 @@ impl Encoder {
         }
     }
 
+    /// Encode lzw, with variable code size. Convenient wrapper that creates a [Vec<u8>] under the hood.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be compressed.
+    /// * `code_size` - Between 2 and 8, the initial code size to use.
+    ///   Initial code size correspond to the range of expected data.
+    ///   For example, let's say we are compressing an ASCII string.
+    ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
+    /// * `endianess` - Bit ordering when writing compressed data.
+    ///
+    /// # Usage
+    /// ```
+    /// use salzweg::{Encoder, Endianness, EncodingError};
+    ///
+    /// fn main() -> Result<(), EncodingError> {
+    ///     let data = vec![0, 0, 1, 3];
+    ///
+    ///     let output = Encoder::encode_to_vec(&data[..], 2, Endianness::LittleEndian)?;
+    ///
+    ///     assert_eq!(output, [0x04, 0x32, 0x05,]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn encode_to_vec<R: Read>(
         data: R,
         code_size: u8,
@@ -218,6 +276,15 @@ mod tests {
             compressed,
             [0x8C, 0x2D, 0x99, 0x87, 0x2A, 0x1C, 0xDC, 0x33, 0xA0, 0x2, 0x55, 0x0,]
         )
+    }
+
+    #[test]
+    fn encode_few_bytes() {
+        let data = [0, 0, 1, 3];
+
+        let mut compressed = vec![];
+        Encoder::encode(&data[..], &mut compressed, 2, Endianness::LittleEndian).unwrap();
+        assert_eq!(compressed, [0x04, 0x32, 0x05,])
     }
 
     #[test]
