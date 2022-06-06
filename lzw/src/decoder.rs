@@ -9,21 +9,32 @@ use crate::{
     Endianness,
 };
 
+/// The error type for decoding operations.
 #[derive(Debug)]
 pub enum DecodingError {
+    /// An I/O error happend when reading or writing data.
     Io(std::io::Error),
-    Lzw(&'static str),
+    /// Code size out of bounds. It should be between 2 and 8 included.
     CodeSize(u8),
+    /// Unexpected code read in the data.
+    UnexpectedCode(u16),
+    /// If the dictionnary grows past size 4096, an expected clear code is missing.
+    MissingClearCode,
 }
 
 impl Display for DecodingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DecodingError::Io(error) => std::fmt::Display::fmt(&error, f),
-            DecodingError::Lzw(message) => f.write_str(message),
             DecodingError::CodeSize(code_size) => f.write_fmt(format_args!(
                 "Code size must be between 2 and 8, was {code_size}",
             )),
+            DecodingError::UnexpectedCode(code) => {
+                f.write_fmt(format_args!("Unexpected code while decompressing: {code}"))
+            }
+            DecodingError::MissingClearCode => {
+                f.write_str("Dictionnary growing past 4096, expected CLEAR_CODE missing")
+            }
         }
     }
 }
@@ -36,9 +47,41 @@ impl From<std::io::Error> for DecodingError {
     }
 }
 
+/// LZW decoder.
 pub struct Decoder {}
 
 impl Decoder {
+    /// Decode lzw using variable code size.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be decoded.
+    /// * `into` - The output where decoded data will be written.
+    /// * `code_size` - Between 2 and 8, the initial code size to use.
+    ///   Initial code size correspond to the range of expected data.
+    ///   For example, let's say we are compressing an ASCII string.
+    ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
+    /// * `endianess` - Bit ordering when reading compressed data.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error] or for unexpected codes or code sizes.
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{Decoder, Endianness, DecodingError};
+    ///
+    /// fn main() -> Result<(), DecodingError> {
+    ///     let data = [0x04, 0x32, 0x05];
+    ///     let mut output = vec![];
+    ///
+    ///     Decoder::decode(&data[..], &mut output, 2, Endianness::LittleEndian)?;
+    ///
+    ///     assert_eq!(output, [0, 0, 1, 3]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn decode<R: Read, W: Write>(
         data: R,
         into: W,
@@ -55,6 +98,35 @@ impl Decoder {
         }
     }
 
+    /// Decode lzw using variable code size. Convenient wrapper that creates a [Vec<u8>] under the hood.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be decoded.
+    /// * `code_size` - Between 2 and 8, the initial code size to use.
+    ///   Initial code size correspond to the range of expected data.
+    ///   For example, let's say we are compressing an ASCII string.
+    ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
+    /// * `endianess` - Bit ordering when reading compressed data.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error] or for unexpected codes or code sizes.
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{Decoder, Endianness, DecodingError};
+    ///
+    /// fn main() -> Result<(), DecodingError> {
+    ///     let data = [0x04, 0x32, 0x05];
+    ///
+    ///     let output = Decoder::decode_to_vec(&data[..], 2, Endianness::LittleEndian)?;
+    ///
+    ///     assert_eq!(output, [0, 0, 1, 3]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn decode_to_vec<R: Read>(
         data: R,
         code_size: u8,
@@ -130,7 +202,7 @@ impl Decoder {
 
             match code.cmp(&next_index) {
                 Ordering::Greater => {
-                    return Err(DecodingError::Lzw("Unexpected code while decoding."));
+                    return Err(DecodingError::UnexpectedCode(code));
                 }
                 Ordering::Equal => {
                     // New word! It correspond to the last decoded word,
@@ -166,9 +238,7 @@ impl Decoder {
                     mask += next_index;
                 }
             } else {
-                return Err(DecodingError::Lzw(
-                    "Dictionnary growing past 4096, expected CLEAR_CODE missing",
-                ));
+                return Err(DecodingError::MissingClearCode);
             }
             previous_code = Some(initial_code);
         }

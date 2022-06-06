@@ -15,8 +15,14 @@ use crate::{
 pub enum EncodingError {
     /// An I/O error happend when reading or writing data.
     Io(std::io::Error),
-    /// Code size out of bounds.
+    /// Code size out of bounds. It should be between 2 and 8 included.
     CodeSize(u8),
+    /// An unexpected code was read.
+    ///
+    /// For a code size of 4 for example,
+    /// we expect the data to be between 0 and 2.pow(4) = 16.
+    /// If in the data, we would then try to encode 42, it would not be correct and we return this unexpected code error.
+    UnexpectedCode { code: u8, code_size: u8 },
 }
 
 impl Display for EncodingError {
@@ -24,7 +30,11 @@ impl Display for EncodingError {
         match self {
             EncodingError::Io(error) => std::fmt::Display::fmt(&error, f),
             EncodingError::CodeSize(code_size) => f.write_fmt(format_args!(
-                "Code size must be between 2 and 8, was {code_size}",
+                "Code size must be between 2 and 8, was {code_size}.",
+            )),
+            EncodingError::UnexpectedCode { code, code_size } => f.write_fmt(format_args!(
+                "Unexpected code {code}. For code size {code_size}, data should be < {}.",
+                (1 << code_size)
             )),
         }
     }
@@ -110,7 +120,7 @@ impl Tree {
     }
 }
 
-/// LZW encoder
+/// LZW encoder.
 pub struct Encoder {}
 
 impl Encoder {
@@ -127,17 +137,21 @@ impl Encoder {
     ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
     /// * `endianess` - Bit ordering when writing compressed data.
     ///
-    /// # Usage
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error] or for unexpected codes or code sizes.
+    ///
+    /// # Examples
     /// ```
     /// use salzweg::{Encoder, Endianness, EncodingError};
     ///
     /// fn main() -> Result<(), EncodingError> {
-    ///     let data = vec![0, 0, 1, 3];
+    ///     let data = [0, 0, 1, 3];
     ///     let mut output = vec![];
     ///
     ///     Encoder::encode(&data[..], &mut output, 2, Endianness::LittleEndian)?;
     ///
-    ///     assert_eq!(output, [0x04, 0x32, 0x05,]);
+    ///     assert_eq!(output, [0x04, 0x32, 0x05]);
     ///     Ok(())
     /// }
     /// ```
@@ -169,16 +183,20 @@ impl Encoder {
     ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
     /// * `endianess` - Bit ordering when writing compressed data.
     ///
-    /// # Usage
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error] or for unexpected codes or code sizes.
+    ///
+    /// # Examples
     /// ```
     /// use salzweg::{Encoder, Endianness, EncodingError};
     ///
     /// fn main() -> Result<(), EncodingError> {
-    ///     let data = vec![0, 0, 1, 3];
+    ///     let data = [0, 0, 1, 3];
     ///
     ///     let output = Encoder::encode_to_vec(&data[..], 2, Endianness::LittleEndian)?;
     ///
-    ///     assert_eq!(output, [0x04, 0x32, 0x05,]);
+    ///     assert_eq!(output, [0x04, 0x32, 0x05]);
     ///     Ok(())
     /// }
     /// ```
@@ -200,6 +218,8 @@ impl Encoder {
         if !(2..=8).contains(&code_size) {
             return Err(EncodingError::CodeSize(code_size));
         }
+
+        let max_code: u8 = ((1u32 << code_size) - 1) as u8;
 
         let mut bit_writer = bit_writer;
 
@@ -228,6 +248,9 @@ impl Encoder {
 
         for k in bytes {
             let k = k?;
+            if k > max_code {
+                return Err(EncodingError::UnexpectedCode { code: k, code_size });
+            }
 
             if let Some(word) = tree.find_word(current_prefix, k) {
                 current_prefix = word;
@@ -321,6 +344,22 @@ mod tests {
             .unwrap();
         let expected = EncodingError::CodeSize(10);
 
+        assert_eq!(expected.to_string(), result.to_string());
+    }
+
+    #[test]
+    fn wrong_data_for_code_size() {
+        let data = [0, 1, 8, 3];
+
+        let result = Encoder::encode_to_vec(&data[..], 2, Endianness::BigEndian)
+            .err()
+            .unwrap();
+        let expected = EncodingError::UnexpectedCode {
+            code: 8,
+            code_size: 2,
+        };
+
+        println!("{expected}");
         assert_eq!(expected.to_string(), result.to_string());
     }
 }

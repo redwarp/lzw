@@ -53,14 +53,8 @@ fn decode_colors() {
         0x8C, 0x2D, 0x99, 0x87, 0x2A, 0x1C, 0xDC, 0x33, 0xA0, 0x2, 0x55, 0x0,
     ];
 
-    // let mut weezl_decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, 2);
-
-    // let decoded = weezl_decoder.decode(&data).unwrap();
-    let mut into = vec![];
-
     let decoded =
         salzweg::Decoder::decode_to_vec(&data[..], 2, salzweg::Endianness::LittleEndian).unwrap();
-    salzweg::Decoder::decode(&data[..], &mut into, 2, salzweg::Endianness::LittleEndian).unwrap();
 
     assert_eq!(
         decoded,

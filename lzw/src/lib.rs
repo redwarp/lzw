@@ -1,4 +1,26 @@
 //! LZW encoder and decoder, GIF flavored.
+//!
+//! This crate provides a Encoder and Decoder to compress and decompress LZW data.
+//! This particular implementation provides the gif variation of LZW, using variable code size.
+//!
+//! # Examples
+//!
+//! ```
+//! use salzweg::{Encoder, Endianness, EncodingError, Decoder, DecodingError};
+//!
+//! let data = [0, 0, 1, 3];
+//! let mut compressed = vec![];
+//! let mut decompressed = vec![];
+//!
+//! Encoder::encode(&data[..], &mut compressed, 2, Endianness::LittleEndian).unwrap();
+//!
+//! assert_eq!(compressed, [0x04, 0x32, 0x05]);
+//!
+//! Decoder::decode(&compressed[..], &mut decompressed, 2, Endianness::LittleEndian).unwrap();
+//!
+//! assert_eq!(decompressed, data);
+//!
+//! ```
 
 mod decoder;
 mod encoder;
