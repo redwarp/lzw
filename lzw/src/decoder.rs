@@ -271,6 +271,15 @@ impl FixedDecoder {
         }
     }
 
+    pub fn decode_to_vec<R: Read>(
+        data: R,
+        endianness: Endianness,
+    ) -> Result<Vec<u8>, DecodingError> {
+        let mut output = vec![];
+        FixedDecoder::decode(data, &mut output, endianness)?;
+        Ok(output)
+    }
+
     fn inner_decode<B: BitReader, W: Write>(bit_reader: B, into: W) -> Result<(), DecodingError> {
         let mut into = into;
 

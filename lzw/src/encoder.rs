@@ -316,6 +316,15 @@ impl FixedEncoder {
         }
     }
 
+    pub fn encode_to_vec<R: Read>(
+        data: R,
+        endianness: Endianness,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let mut output = vec![];
+        FixedEncoder::encode(data, &mut output, endianness)?;
+        Ok(output)
+    }
+
     fn inner_encode<R: Read, B: BitWriter>(data: R, bit_writer: B) -> Result<(), EncodingError> {
         const WRITE_SIZE: u8 = 12;
 
@@ -328,7 +337,6 @@ impl FixedEncoder {
         let k = bytes.next();
         if k.is_none() {
             // Well, it's an empty stream! Leaving early.
-
             bit_writer.fill()?;
             bit_writer.flush()?;
 

@@ -11,6 +11,7 @@ fn main() {
     check_string_compression(LOREM_IPSUM_LONG);
     check_string_decoding(LOREM_IPSUM_ENCODED);
     check_string_decoding(LOREM_IPSUM_LONG_ENCODED);
+    check_fixed_string_encoding(LOREM_IPSUM_ENCODED);
     decode_colors();
 }
 
@@ -46,6 +47,20 @@ fn check_string_decoding(data: &[u8]) {
     let weezl_decompressed = weezl_decoder.decode(&data).unwrap();
 
     assert_eq!(my_decompressed, weezl_decompressed);
+}
+
+fn check_fixed_string_encoding(data: &[u8]) {
+    let compressed =
+        salzweg::encoder::FixedEncoder::encode_to_vec(data, salzweg::Endianness::LittleEndian)
+            .unwrap();
+
+    let decompressed = salzweg::decoder::FixedDecoder::decode_to_vec(
+        &compressed[..],
+        salzweg::Endianness::LittleEndian,
+    )
+    .unwrap();
+
+    assert_eq!(decompressed, data);
 }
 
 fn decode_colors() {
