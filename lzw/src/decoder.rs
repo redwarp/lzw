@@ -137,6 +137,19 @@ impl Decoder {
         Ok(output)
     }
 
+    pub fn decode_fix<R: Read, W: Write>(
+        data: R,
+        into: W,
+        endianness: Endianness,
+    ) -> Result<(), DecodingError> {
+        match endianness {
+            Endianness::BigEndian => Decoder::inner_decode_fix(BigEndianReader::new(data), into),
+            Endianness::LittleEndian => {
+                Decoder::inner_decode_fix(LittleEndianReader::new(data), into)
+            }
+        }
+    }
+
     fn inner_decode<B: BitReader, W: Write>(
         bit_reader: B,
         into: W,
@@ -180,7 +193,7 @@ impl Decoder {
         let mut word_length = 0;
 
         loop {
-            let mut code = bit_reader.read(read_size)?;
+            let mut code = bit_reader.read_one(read_size)?;
 
             if code == clear_code {
                 read_size = code_size + 1;
@@ -239,6 +252,95 @@ impl Decoder {
                 }
             } else {
                 return Err(DecodingError::MissingClearCode);
+            }
+            previous_code = Some(initial_code);
+        }
+
+        into.flush()?;
+
+        Ok(())
+    }
+
+    fn inner_decode_fix<B: BitReader, W: Write>(
+        bit_reader: B,
+        into: W,
+    ) -> Result<(), DecodingError> {
+        let mut into = into;
+
+        const TABLE_MAX_SIZE: usize = 4096;
+        // The stack should be as big as the longest word that the dictionnary can have.
+        // The longuest word would be reached if by bad luck, each entry of the dictionnary is made of the
+        // previous entry, increasing in size each time. This size would be the biggest for the minimum code size of 2,
+        // as there would be more "free entry" in the table not corresponding to a single digit.
+        // In effect, stack max size = 4096 - 2^2 - 2 entries for clear and EOF + 1.
+        const STACK_MAX_SIZE: usize = 4091;
+        // In effect, our prefix and suffix is our decoding table, as each word can be expressed by a previous
+        // code (prefix), and the extra letter (suffix). We store the word length as well, it's useful
+        // to recreate the word stack.
+        const READ_SIZE: u8 = 12;
+
+        let mut prefix: [u16; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
+        let mut suffix: [u8; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
+        let mut length: [usize; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
+        // We will use this stack to decode each string.
+        let mut decoding_stack: [u8; STACK_MAX_SIZE] = [0; STACK_MAX_SIZE];
+        // We prefill our dictionnary with all the known values;
+        for code in 0..256 {
+            suffix[code as usize] = code as u8;
+            length[code as usize] = 1;
+        }
+
+        let mut next_index = 256;
+        let mut previous_code: Option<u16> = None;
+        let mut bit_reader = bit_reader;
+        let mut word_length = 0;
+
+        for code in bit_reader.iter(READ_SIZE) {
+            let mut code = code?;
+
+            if previous_code == None {
+                into.write_all(&[suffix[code as usize]])?;
+                previous_code = Some(code);
+                decoding_stack[0] = code as u8;
+                word_length = 1;
+                continue;
+            }
+
+            let initial_code = code;
+
+            match code.cmp(&next_index) {
+                Ordering::Greater => {
+                    return Err(DecodingError::UnexpectedCode(code));
+                }
+                Ordering::Equal => {
+                    // New word! It correspond to the last decoded word,
+                    // plus the first char of the previously decoded word.
+                    decoding_stack[word_length] = decoding_stack[0];
+                    // The word length is the length of the previous word, plus one.
+                    word_length += 1;
+                }
+                Ordering::Less => {
+                    word_length = length[code as usize];
+                    let mut stack_top = word_length;
+
+                    // We assemble the string char by char.
+                    while code >= 256 {
+                        stack_top -= 1;
+                        decoding_stack[stack_top] = suffix[code as usize];
+                        code = prefix[code as usize]
+                    }
+
+                    decoding_stack[0] = code as u8;
+                }
+            }
+
+            into.write_all(&decoding_stack[0..word_length])?;
+
+            if next_index < TABLE_MAX_SIZE as u16 {
+                prefix[next_index as usize] = previous_code.unwrap();
+                suffix[next_index as usize] = decoding_stack[0];
+                length[next_index as usize] = length[previous_code.unwrap() as usize] + 1;
+                next_index += 1;
             }
             previous_code = Some(initial_code);
         }
@@ -307,5 +409,24 @@ mod tests {
         let expected = DecodingError::CodeSize(10);
 
         assert_eq!(expected.to_string(), result.to_string());
+    }
+
+    #[test]
+    fn decode_4color_data_fix() {
+        let data = [
+            0x1, 0x0, 0x10, 0x0, 0x21, 0x0, 0x3, 0x31, 0x10, 0x1, 0x21, 0x10, 0x4, 0x21, 0x0, 0x6,
+            0x11, 0x0, 0x8, 0x91, 0x10, 0x0, 0x1, 0x0, 0xF, 0x1, 0x0, 0x4, 0x1,
+        ];
+
+        let mut decoded = vec![];
+        Decoder::decode_fix(&data[..], &mut decoded, Endianness::LittleEndian).unwrap();
+
+        assert_eq!(
+            decoded,
+            [
+                1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2,
+                2, 2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
+            ]
+        );
     }
 }

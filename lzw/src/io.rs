@@ -1,7 +1,11 @@
 use std::io::{Read, Write};
 
-pub trait BitReader {
-    fn read(&mut self, amount: u8) -> Result<u16, std::io::Error>;
+pub trait BitReader: Sized {
+    fn read_one(&mut self, amount: u8) -> Result<u16, std::io::Error>;
+    fn read(&mut self, amount: u8, buf: &mut [u16]) -> Result<usize, std::io::Error>;
+    fn iter(&mut self, amount: u8) -> BitReaderIterator<Self> {
+        BitReaderIterator::new(self, amount)
+    }
 }
 
 pub struct LittleEndianReader<R>
@@ -36,7 +40,7 @@ where
     R: Read,
 {
     #[inline]
-    fn read(&mut self, amount: u8) -> Result<u16, std::io::Error> {
+    fn read_one(&mut self, amount: u8) -> Result<u16, std::io::Error> {
         while self.cursor < amount {
             self.read.read_exact(&mut self.read_buffer[..])?;
             self.byte_buffer |= (self.read_buffer[0] as u32) << self.cursor;
@@ -48,6 +52,28 @@ where
         self.byte_buffer >>= amount;
         self.cursor -= amount;
         Ok(data)
+    }
+
+    fn read(&mut self, amount: u8, buf: &mut [u16]) -> Result<usize, std::io::Error> {
+        let mut done = 0;
+        while done < buf.len() {
+            while self.cursor < amount {
+                if self.read.read(&mut self.read_buffer[..])? == 0 {
+                    return Ok(done);
+                }
+
+                self.byte_buffer |= (self.read_buffer[0] as u32) << self.cursor;
+                self.cursor += 8;
+            }
+
+            let mask = (1 << amount) - 1;
+            buf[done] = (self.byte_buffer & mask) as u16;
+            self.byte_buffer >>= amount;
+            self.cursor -= amount;
+            done += 1;
+        }
+
+        Ok(done)
     }
 }
 
@@ -83,7 +109,7 @@ where
     R: Read,
 {
     #[inline]
-    fn read(&mut self, amount: u8) -> Result<u16, std::io::Error> {
+    fn read_one(&mut self, amount: u8) -> Result<u16, std::io::Error> {
         while self.cursor < amount {
             self.read.read_exact(&mut self.read_buffer[..])?;
             let shift = 24 - self.cursor;
@@ -99,10 +125,73 @@ where
 
         Ok(data)
     }
+
+    fn read(&mut self, amount: u8, buf: &mut [u16]) -> Result<usize, std::io::Error> {
+        let mut done = 0;
+        while done < buf.len() {
+            while self.cursor < amount {
+                self.read.read_exact(&mut self.read_buffer[..])?;
+                let shift = 24 - self.cursor;
+                self.byte_buffer |= (self.read_buffer[0] as u32) << shift;
+                self.cursor += 8;
+            }
+
+            let mask = (1 << amount) - 1;
+            let shift = 32 - amount;
+            buf[done] = ((self.byte_buffer >> shift) & mask) as u16;
+            self.byte_buffer <<= amount;
+            self.cursor -= amount;
+            done += 1;
+        }
+
+        Ok(done)
+    }
+}
+
+pub struct BitReaderIterator<'a, B>
+where
+    B: BitReader,
+{
+    reader: &'a mut B,
+    amount: u8,
+    buf: [u16; 1],
+}
+
+impl<'a, B> BitReaderIterator<'a, B>
+where
+    B: BitReader,
+{
+    fn new(reader: &'a mut B, amount: u8) -> Self {
+        Self {
+            reader,
+            amount,
+            buf: [0],
+        }
+    }
+}
+
+impl<'a, B> Iterator for BitReaderIterator<'a, B>
+where
+    B: BitReader,
+{
+    type Item = Result<u16, std::io::Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.reader.read(self.amount, &mut self.buf[..]) {
+            Ok(usize) => {
+                if usize == 0 {
+                    None
+                } else {
+                    Some(Ok(self.buf[0]))
+                }
+            }
+            Err(err) => Some(Err(err)),
+        }
+    }
 }
 
 pub trait BitWriter {
-    fn write(&mut self, amount: u8, data: u16) -> Result<(), std::io::Error>;
+    fn write(&mut self, data: u16, amount: u8) -> Result<(), std::io::Error>;
 
     fn fill(&mut self) -> Result<(), std::io::Error>;
 
@@ -138,7 +227,7 @@ where
     W: Write,
 {
     #[inline]
-    fn write(&mut self, amount: u8, data: u16) -> Result<(), std::io::Error> {
+    fn write(&mut self, data: u16, amount: u8) -> Result<(), std::io::Error> {
         let mask = (1 << amount) - 1;
         self.byte_buffer |= (data as u32 & mask) << self.cursor;
         self.cursor += amount;
@@ -200,7 +289,7 @@ where
     W: Write,
 {
     #[inline]
-    fn write(&mut self, amount: u8, data: u16) -> Result<(), std::io::Error> {
+    fn write(&mut self, data: u16, amount: u8) -> Result<(), std::io::Error> {
         let mask = (1 << amount) - 1;
         let shift = 32 - amount - self.cursor;
         self.byte_buffer |= (data as u32 & mask) << shift;
@@ -244,7 +333,7 @@ mod tests {
 
         let mut reader = LittleEndianReader::new(&input[..]);
 
-        assert_eq!(1, reader.read(1).unwrap());
+        assert_eq!(1, reader.read_one(1).unwrap());
     }
 
     #[test]
@@ -254,11 +343,11 @@ mod tests {
         let mut reader = LittleEndianReader::new(&input[..]);
         let mut output = vec![];
 
-        output.push(reader.read(3).unwrap());
-        output.push(reader.read(3).unwrap());
-        output.push(reader.read(3).unwrap());
-        output.push(reader.read(3).unwrap());
-        output.push(reader.read(4).unwrap());
+        output.push(reader.read_one(3).unwrap());
+        output.push(reader.read_one(3).unwrap());
+        output.push(reader.read_one(3).unwrap());
+        output.push(reader.read_one(3).unwrap());
+        output.push(reader.read_one(4).unwrap());
 
         assert_eq!(output, [4, 1, 6, 6, 2]);
     }
@@ -269,7 +358,7 @@ mod tests {
 
         let mut reader = LittleEndianReader::new(&input[..]);
 
-        assert_eq!(reader.read(12).unwrap(), 0xfff);
+        assert_eq!(reader.read_one(12).unwrap(), 0xfff);
     }
 
     #[test]
@@ -278,7 +367,7 @@ mod tests {
 
         let mut reader = LittleEndianReader::new(&input[..]);
 
-        assert_eq!(reader.read(16).unwrap(), 0xfffa);
+        assert_eq!(reader.read_one(16).unwrap(), 0xfffa);
     }
 
     #[test]
@@ -287,7 +376,7 @@ mod tests {
 
         let mut reader = BigEndianReader::new(&input[..]);
 
-        assert_eq!(1, reader.read(1).unwrap());
+        assert_eq!(1, reader.read_one(1).unwrap());
     }
 
     #[test]
@@ -297,11 +386,11 @@ mod tests {
         let mut reader = BigEndianReader::new(&input[..]);
         let mut output = vec![];
 
-        output.push(reader.read(3).unwrap());
-        output.push(reader.read(3).unwrap());
-        output.push(reader.read(3).unwrap());
-        output.push(reader.read(3).unwrap());
-        output.push(reader.read(4).unwrap());
+        output.push(reader.read_one(3).unwrap());
+        output.push(reader.read_one(3).unwrap());
+        output.push(reader.read_one(3).unwrap());
+        output.push(reader.read_one(3).unwrap());
+        output.push(reader.read_one(4).unwrap());
 
         assert_eq!(output, [4, 1, 6, 6, 2]);
     }
@@ -312,7 +401,7 @@ mod tests {
 
         let mut reader = BigEndianReader::new(&input[..]);
 
-        assert_eq!(reader.read(12).unwrap(), 0xfff);
+        assert_eq!(reader.read_one(12).unwrap(), 0xfff);
     }
 
     #[test]
@@ -321,7 +410,7 @@ mod tests {
 
         let mut reader = BigEndianReader::new(&input[..]);
 
-        assert_eq!(reader.read(16).unwrap(), 0xfffa);
+        assert_eq!(reader.read_one(16).unwrap(), 0xfffa);
     }
 
     #[test]
@@ -329,7 +418,7 @@ mod tests {
         let mut output = vec![];
 
         let mut writer = LittleEndianWriter::new(&mut output);
-        writer.write(1, 0x1)?;
+        writer.write(0x1, 1)?;
         writer.fill()?;
 
         assert_eq!(output, [0x01]);
@@ -342,11 +431,11 @@ mod tests {
         let mut output = vec![];
 
         let mut writer = LittleEndianWriter::new(&mut output);
-        writer.write(3, 4)?;
-        writer.write(3, 1)?;
-        writer.write(3, 6)?;
-        writer.write(3, 6)?;
-        writer.write(4, 2)?;
+        writer.write(4, 3)?;
+        writer.write(1, 3)?;
+        writer.write(6, 3)?;
+        writer.write(6, 3)?;
+        writer.write(2, 4)?;
         writer.fill()?;
 
         assert_eq!(output, [0x8C, 0x2D]);
@@ -359,7 +448,7 @@ mod tests {
         let mut output = vec![];
 
         let mut writer = LittleEndianWriter::new(&mut output);
-        writer.write(12, 0xfff)?;
+        writer.write(0xfff, 12)?;
         writer.fill()?;
 
         assert_eq!(output, [0xff, 0x0f]);
@@ -372,7 +461,7 @@ mod tests {
         let mut output = vec![];
 
         let mut writer = LittleEndianWriter::new(&mut output);
-        writer.write(16, 0xfffa)?;
+        writer.write(0xfffa, 16)?;
         writer.fill()?;
 
         assert_eq!(output, [0xfa, 0xff]);
@@ -385,7 +474,7 @@ mod tests {
         let mut output = vec![];
 
         let mut writer = BigEndianWriter::new(&mut output);
-        writer.write(1, 0x1)?;
+        writer.write(0x1, 1)?;
         writer.fill()?;
 
         assert_eq!(output, [0x80]);
@@ -398,11 +487,11 @@ mod tests {
         let mut output = vec![];
 
         let mut writer = BigEndianWriter::new(&mut output);
-        writer.write(3, 4)?;
-        writer.write(3, 1)?;
-        writer.write(3, 6)?;
-        writer.write(3, 6)?;
-        writer.write(4, 2)?;
+        writer.write(4, 3)?;
+        writer.write(1, 3)?;
+        writer.write(6, 3)?;
+        writer.write(6, 3)?;
+        writer.write(2, 4)?;
         writer.fill()?;
 
         assert_eq!(output, [0x87, 0x62]);
@@ -415,7 +504,7 @@ mod tests {
         let mut output = vec![];
 
         let mut writer = BigEndianWriter::new(&mut output);
-        writer.write(12, 0xfff)?;
+        writer.write(0xfff, 12)?;
         writer.fill()?;
 
         assert_eq!(output, [0xff, 0xf0]);
@@ -429,10 +518,30 @@ mod tests {
 
         let mut writer = BigEndianWriter::new(&mut output);
 
-        writer.write(16, 0xfffa)?;
+        writer.write(0xfffa, 16)?;
         writer.fill()?;
 
         assert_eq!(output, [0xff, 0xfa]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn read_full() -> Result<(), std::io::Error> {
+        let mut output = vec![];
+        let mut writer = LittleEndianWriter::new(&mut output);
+        writer.write(0, 12)?;
+        writer.write(1, 12)?;
+        writer.write(0, 12)?;
+        writer.write(2, 12)?;
+        writer.fill()?;
+        writer.flush()?;
+        drop(writer);
+
+        let mut reader = LittleEndianReader::new(&output[..]);
+        let result: Result<Vec<u16>, _> = reader.iter(12).collect();
+
+        assert_eq!(result?, [0, 1, 0, 2]);
 
         Ok(())
     }

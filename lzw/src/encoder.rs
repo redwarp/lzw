@@ -13,7 +13,7 @@ use crate::{
 /// Encapsulate [std::io::Error] and expose LZW code size or unexpected data issues.
 #[derive(Debug)]
 pub enum EncodingError {
-    /// An I/O error happend when reading or writing data.
+    /// An I/O error happened when reading or writing data.
     Io(std::io::Error),
     /// Code size out of bounds. It should be between 2 and 8 included.
     CodeSize(u8),
@@ -60,17 +60,26 @@ enum Node {
 struct Tree {
     nodes: Vec<Node>,
     code_size: u8,
+    with_clear_code: bool,
 }
 
 impl Tree {
-    fn new(code_size: u8) -> Self {
+    fn new(code_size: u8, with_clear_code: bool) -> Self {
         let nodes = Vec::with_capacity(1 << (code_size + 1));
-        Self { nodes, code_size }
+        Self {
+            nodes,
+            code_size,
+            with_clear_code,
+        }
     }
 
     fn reset(&mut self) {
         self.nodes.clear();
-        self.nodes.resize((1 << self.code_size) + 2, Node::NoChild);
+        if self.with_clear_code {
+            self.nodes.resize((1 << self.code_size) + 2, Node::NoChild);
+        } else {
+            self.nodes.resize(1 << self.code_size, Node::NoChild);
+        }
     }
 
     fn find_word(&self, prefix_index: u16, next_char: u8) -> Option<u16> {
@@ -117,6 +126,10 @@ impl Tree {
         };
         self.nodes.push(Node::NoChild);
         new_index
+    }
+
+    fn len(&self) -> usize {
+        self.nodes.len()
     }
 }
 
@@ -210,6 +223,19 @@ impl Encoder {
         Ok(output)
     }
 
+    pub fn encode_fix<R: Read, W: Write>(
+        data: R,
+        into: W,
+        endianness: Endianness,
+    ) -> Result<(), EncodingError> {
+        match endianness {
+            Endianness::BigEndian => Encoder::inner_fix_encode(data, BigEndianWriter::new(into)),
+            Endianness::LittleEndian => {
+                Encoder::inner_fix_encode(data, LittleEndianWriter::new(into))
+            }
+        }
+    }
+
     fn inner_encode<R: Read, B: BitWriter>(
         data: R,
         bit_writer: B,
@@ -227,16 +253,16 @@ impl Encoder {
         let clear_code = 1 << code_size;
         let end_of_information = (1 << code_size) + 1;
 
-        let mut tree = Tree::new(code_size);
+        let mut tree = Tree::new(code_size, true);
         tree.reset();
 
-        bit_writer.write(write_size, clear_code)?;
+        bit_writer.write(clear_code, write_size)?;
 
         let mut bytes = data.bytes();
         let k = bytes.next();
         if k.is_none() {
             // Well, it's an empty stream! Leaving early.
-            bit_writer.write(write_size, end_of_information)?;
+            bit_writer.write(end_of_information, write_size)?;
 
             bit_writer.fill()?;
             bit_writer.flush()?;
@@ -256,14 +282,14 @@ impl Encoder {
                 current_prefix = word;
             } else {
                 let index_of_new_entry = tree.add(current_prefix, k);
-                bit_writer.write(write_size, current_prefix)?;
+                bit_writer.write(current_prefix, write_size)?;
                 current_prefix = k as u16;
 
                 if index_of_new_entry == 1 << write_size {
                     write_size += 1;
 
                     if write_size > 12 {
-                        bit_writer.write(12, clear_code)?;
+                        bit_writer.write(clear_code, 12)?;
                         write_size = code_size + 1;
                         tree.reset();
                     }
@@ -271,9 +297,54 @@ impl Encoder {
             }
         }
 
-        bit_writer.write(write_size, current_prefix as u16)?;
-        bit_writer.write(write_size, end_of_information)?;
+        bit_writer.write(current_prefix as u16, write_size)?;
+        bit_writer.write(end_of_information, write_size)?;
 
+        bit_writer.fill()?;
+        bit_writer.flush()?;
+
+        Ok(())
+    }
+
+    fn inner_fix_encode<R: Read, B: BitWriter>(
+        data: R,
+        bit_writer: B,
+    ) -> Result<(), EncodingError> {
+        const WRITE_SIZE: u8 = 12;
+
+        let mut bit_writer = bit_writer;
+
+        let mut tree = Tree::new(8, false);
+        tree.reset();
+
+        let mut bytes = data.bytes();
+        let k = bytes.next();
+        if k.is_none() {
+            // Well, it's an empty stream! Leaving early.
+
+            bit_writer.fill()?;
+            bit_writer.flush()?;
+
+            return Ok(());
+        }
+
+        let mut current_prefix = k.unwrap()? as u16;
+
+        for k in bytes {
+            let k = k?;
+
+            if let Some(word) = tree.find_word(current_prefix, k) {
+                current_prefix = word;
+            } else {
+                if tree.len() < 4096 {
+                    tree.add(current_prefix, k);
+                }
+                bit_writer.write(current_prefix, WRITE_SIZE)?;
+                current_prefix = k as u16;
+            }
+        }
+
+        bit_writer.write(current_prefix as u16, WRITE_SIZE)?;
         bit_writer.fill()?;
         bit_writer.flush()?;
 
@@ -361,5 +432,23 @@ mod tests {
 
         println!("{expected}");
         assert_eq!(expected.to_string(), result.to_string());
+    }
+
+    #[test]
+    fn encode_4color_data_fix() {
+        let data = [
+            1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2,
+            2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
+        ];
+
+        let mut compressed = vec![];
+        Encoder::encode_fix(&data[..], &mut compressed, Endianness::LittleEndian).unwrap();
+        println!("{compressed:#02X?}");
+
+        let expected = [
+            0x1, 0x0, 0x10, 0x0, 0x21, 0x0, 0x3, 0x31, 0x10, 0x1, 0x21, 0x10, 0x4, 0x21, 0x0, 0x6,
+            0x11, 0x0, 0x8, 0x91, 0x10, 0x0, 0x1, 0x0, 0xF, 0x1, 0x0, 0x4, 0x1,
+        ];
+        assert_eq!(compressed, expected)
     }
 }
