@@ -3,6 +3,10 @@
 //! This crate provides a Encoder and Decoder to compress and decompress LZW data.
 //! This particular implementation provides the gif variation of LZW, using variable code size.
 //!
+//! It's fast, and use limited memory to do so: the decoder only uses the stack.
+//!
+//! It also work with any [std::io::Read] and [std::io::Write].
+//!
 //! # Examples
 //!
 //! ```
@@ -37,6 +41,8 @@ pub use encoder::EncodingError;
 /// but big endian still works.
 #[derive(Debug, Clone, Copy)]
 pub enum Endianness {
+    /// Most significant order.
     BigEndian,
+    /// Least significant order.
     LittleEndian,
 }
