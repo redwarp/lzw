@@ -1,8 +1,14 @@
 [package]
 name = "salzweg"
 version = "0.1.0"
+authors = ["Redwarp <redwarp@gmail.com>"]
 edition = "2021"
-autobenches = false
+description = "A LZW encoder and decoder, GIF flavored."
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/redwarp/lzw"
+keywords = ["lzw", "gif"]
+categories = ["compression"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]

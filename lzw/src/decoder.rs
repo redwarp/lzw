@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     fmt::{Debug, Display},
     io::{Read, Write},
 };
@@ -35,16 +36,6 @@ impl From<std::io::Error> for DecodingError {
     }
 }
 
-impl PartialEq for DecodingError {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Io(l0), Self::Io(r0)) => l0.kind() == r0.kind(),
-            (Self::Lzw(l0), Self::Lzw(r0)) => l0 == r0,
-            (Self::CodeSize(l0), Self::CodeSize(r0)) => l0 == r0,
-            _ => false,
-        }
-    }
-}
 pub struct Decoder {}
 
 impl Decoder {
@@ -79,7 +70,7 @@ impl Decoder {
         into: W,
         code_size: u8,
     ) -> Result<(), DecodingError> {
-        if code_size < 2 || code_size > 8 {
+        if !(2..=8).contains(&code_size) {
             return Err(DecodingError::CodeSize(code_size));
         }
         let mut into = into;
@@ -137,26 +128,30 @@ impl Decoder {
 
             let initial_code = code;
 
-            if code > next_index {
-                return Err(DecodingError::Lzw("Unexpected code while decoding."));
-            } else if code == next_index {
-                // New word! It correspond to the last decoded word,
-                // plus the first char of the previously decoded word.
-                decoding_stack[word_length] = decoding_stack[0];
-                // The word length is the length of the previous word, plus one.
-                word_length = word_length + 1;
-            } else {
-                word_length = length[code as usize];
-                let mut stack_top = word_length;
-
-                // We assemble the string char by char.
-                while code >= clear_code {
-                    stack_top -= 1;
-                    decoding_stack[stack_top] = suffix[code as usize];
-                    code = prefix[code as usize]
+            match code.cmp(&next_index) {
+                Ordering::Greater => {
+                    return Err(DecodingError::Lzw("Unexpected code while decoding."));
                 }
+                Ordering::Equal => {
+                    // New word! It correspond to the last decoded word,
+                    // plus the first char of the previously decoded word.
+                    decoding_stack[word_length] = decoding_stack[0];
+                    // The word length is the length of the previous word, plus one.
+                    word_length += 1;
+                }
+                Ordering::Less => {
+                    word_length = length[code as usize];
+                    let mut stack_top = word_length;
 
-                decoding_stack[0] = code as u8;
+                    // We assemble the string char by char.
+                    while code >= clear_code {
+                        stack_top -= 1;
+                        decoding_stack[stack_top] = suffix[code as usize];
+                        code = prefix[code as usize]
+                    }
+
+                    decoding_stack[0] = code as u8;
+                }
             }
 
             into.write_all(&decoding_stack[0..word_length])?;
@@ -186,7 +181,6 @@ impl Decoder {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     #[test]
@@ -237,9 +231,11 @@ mod tests {
         let data = [0];
         let into = vec![];
 
-        let result = Decoder::decode(&data[..], into, 10, Endianness::LittleEndian).err();
-        let expected = Some(DecodingError::CodeSize(10));
+        let result = Decoder::decode(&data[..], into, 10, Endianness::LittleEndian)
+            .err()
+            .unwrap();
+        let expected = DecodingError::CodeSize(10);
 
-        assert_eq!(expected, result);
+        assert_eq!(expected.to_string(), result.to_string());
     }
 }
