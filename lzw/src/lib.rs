@@ -10,7 +10,6 @@
 //! # Examples
 //!
 //! ```
-//!
 //! use salzweg::{
 //!     decoder::{Decoder, DecodingError},
 //!     encoder::{Encoder, EncodingError},
@@ -28,7 +27,6 @@
 //! Decoder::decode(&compressed[..], &mut decompressed, 2, Endianness::LittleEndian).unwrap();
 //!
 //! assert_eq!(decompressed, data);
-//!
 //! ```
 
 pub mod decoder;

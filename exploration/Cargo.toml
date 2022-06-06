@@ -2,7 +2,6 @@
 name = "exploration"
 version = "0.1.0"
 edition = "2021"
-autobenches = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
@@ -10,14 +9,6 @@ salzweg = { path = "../lzw" }
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }
-lzw = "0.10"
-weezl = "0.1"
-rand = "0.8"
-png = "0.17"
-
-[[bench]]
-name = "compare_crates"
-harness = false
 
 [[bench]]
 name = "compare_evolutions"

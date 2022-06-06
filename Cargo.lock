@@ -258,11 +258,7 @@ name = "exploration"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "lzw",
- "png",
- "rand",
  "salzweg",
- "weezl",
 ]
 
 [[package]]
@@ -644,6 +640,13 @@ checksum = "f3f6f92acf49d1b98f7a81226834412ada05458b7364277387724a237f062695"
 [[package]]
 name = "salzweg"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+ "lzw",
+ "png",
+ "rand",
+ "weezl",
+]
 
 [[package]]
 name = "same-file"
@@ -715,9 +718,9 @@ checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
 name = "syn"
-version = "1.0.95"
+version = "1.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbaf6116ab8924f39d52792136fb74fd60a80194cf1b1c6ffa6453eef1c3f942"
+checksum = "0748dd251e24453cb8717f0354206b91557e4ec8703673a4b30208f2abaf1ebf"
 dependencies = [
  "proc-macro2",
  "quote",
