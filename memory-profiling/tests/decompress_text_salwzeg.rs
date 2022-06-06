@@ -12,7 +12,7 @@ fn decompress_text_salzweg() {
 
     let start_stats = dhat::HeapStats::get();
 
-    salzweg::Decoder::decode(
+    salzweg::decoder::Decoder::decode(
         LOREM_IPSUM_LONG_ENCODED,
         &mut decompressed,
         7,

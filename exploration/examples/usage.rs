@@ -16,7 +16,7 @@ fn main() {
 
 fn check_string_compression(string: &str) {
     let mut compressed = vec![];
-    salzweg::Encoder::encode(
+    salzweg::encoder::Encoder::encode(
         string.as_bytes(),
         &mut compressed,
         7,
@@ -34,7 +34,7 @@ fn check_string_compression(string: &str) {
 
 fn check_string_decoding(data: &[u8]) {
     let mut my_decompressed = vec![];
-    salzweg::Decoder::decode(
+    salzweg::decoder::Decoder::decode(
         data,
         &mut my_decompressed,
         7,
@@ -54,7 +54,8 @@ fn decode_colors() {
     ];
 
     let decoded =
-        salzweg::Decoder::decode_to_vec(&data[..], 2, salzweg::Endianness::LittleEndian).unwrap();
+        salzweg::decoder::Decoder::decode_to_vec(&data[..], 2, salzweg::Endianness::LittleEndian)
+            .unwrap();
 
     assert_eq!(
         decoded,

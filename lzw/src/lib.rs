@@ -10,7 +10,12 @@
 //! # Examples
 //!
 //! ```
-//! use salzweg::{Encoder, Endianness, EncodingError, Decoder, DecodingError};
+//!
+//! use salzweg::{
+//!     decoder::{Decoder, DecodingError},
+//!     encoder::{Encoder, EncodingError},
+//!     Endianness,
+//! };
 //!
 //! let data = [0, 0, 1, 3];
 //! let mut compressed = vec![];
@@ -26,14 +31,9 @@
 //!
 //! ```
 
-mod decoder;
-mod encoder;
+pub mod decoder;
+pub mod encoder;
 mod io;
-
-pub use decoder::Decoder;
-pub use decoder::DecodingError;
-pub use encoder::Encoder;
-pub use encoder::EncodingError;
 
 /// The bit ordering when encoding or decoding LZW.
 ///

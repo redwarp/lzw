@@ -11,7 +11,7 @@ fn compress_text_salzweg() {
 
     let start_stats = dhat::HeapStats::get();
 
-    salzweg::Encoder::encode(
+    salzweg::encoder::Encoder::encode(
         LOREM_IPSUM_LONG.as_bytes(),
         &mut compressed,
         7,

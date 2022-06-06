@@ -48,7 +48,7 @@ impl From<std::io::Error> for DecodingError {
 }
 
 /// LZW decoder.
-pub struct Decoder {}
+pub struct Decoder;
 
 impl Decoder {
     /// Decode lzw using variable code size.
@@ -70,7 +70,10 @@ impl Decoder {
     ///
     /// # Examples
     /// ```
-    /// use salzweg::{Decoder, Endianness, DecodingError};
+    /// use salzweg::{
+    ///     decoder::{Decoder, DecodingError},
+    ///     Endianness,
+    /// };
     ///
     /// fn main() -> Result<(), DecodingError> {
     ///     let data = [0x04, 0x32, 0x05];
@@ -116,7 +119,10 @@ impl Decoder {
     ///
     /// # Examples
     /// ```
-    /// use salzweg::{Decoder, Endianness, DecodingError};
+    /// use salzweg::{
+    ///     decoder::{Decoder, DecodingError},
+    ///     Endianness,
+    /// };
     ///
     /// fn main() -> Result<(), DecodingError> {
     ///     let data = [0x04, 0x32, 0x05];
@@ -135,19 +141,6 @@ impl Decoder {
         let mut output = vec![];
         Decoder::decode(data, &mut output, code_size, endianness)?;
         Ok(output)
-    }
-
-    pub fn decode_fix<R: Read, W: Write>(
-        data: R,
-        into: W,
-        endianness: Endianness,
-    ) -> Result<(), DecodingError> {
-        match endianness {
-            Endianness::BigEndian => Decoder::inner_decode_fix(BigEndianReader::new(data), into),
-            Endianness::LittleEndian => {
-                Decoder::inner_decode_fix(LittleEndianReader::new(data), into)
-            }
-        }
     }
 
     fn inner_decode<B: BitReader, W: Write>(
@@ -260,11 +253,25 @@ impl Decoder {
 
         Ok(())
     }
+}
 
-    fn inner_decode_fix<B: BitReader, W: Write>(
-        bit_reader: B,
+pub struct FixedDecoder;
+
+impl FixedDecoder {
+    pub fn decode<R: Read, W: Write>(
+        data: R,
         into: W,
+        endianness: Endianness,
     ) -> Result<(), DecodingError> {
+        match endianness {
+            Endianness::BigEndian => FixedDecoder::inner_decode(BigEndianReader::new(data), into),
+            Endianness::LittleEndian => {
+                FixedDecoder::inner_decode(LittleEndianReader::new(data), into)
+            }
+        }
+    }
+
+    fn inner_decode<B: BitReader, W: Write>(bit_reader: B, into: W) -> Result<(), DecodingError> {
         let mut into = into;
 
         const TABLE_MAX_SIZE: usize = 4096;
@@ -419,7 +426,7 @@ mod tests {
         ];
 
         let mut decoded = vec![];
-        Decoder::decode_fix(&data[..], &mut decoded, Endianness::LittleEndian).unwrap();
+        FixedDecoder::decode(&data[..], &mut decoded, Endianness::LittleEndian).unwrap();
 
         assert_eq!(
             decoded,

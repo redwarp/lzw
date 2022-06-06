@@ -134,7 +134,7 @@ impl Tree {
 }
 
 /// LZW encoder.
-pub struct Encoder {}
+pub struct Encoder;
 
 impl Encoder {
     /// Encode lzw, with variable code size.
@@ -156,7 +156,10 @@ impl Encoder {
     ///
     /// # Examples
     /// ```
-    /// use salzweg::{Encoder, Endianness, EncodingError};
+    /// use salzweg::{
+    ///     encoder::{Encoder, EncodingError},
+    ///     Endianness,
+    /// };
     ///
     /// fn main() -> Result<(), EncodingError> {
     ///     let data = [0, 0, 1, 3];
@@ -198,11 +201,14 @@ impl Encoder {
     ///
     /// # Errors
     ///
-    /// This function can fail on an [std::io::Error] or for unexpected codes or code sizes.
+    /// This function can fail on an [std::io::Error], unexpected codes or code sizes.
     ///
     /// # Examples
     /// ```
-    /// use salzweg::{Encoder, Endianness, EncodingError};
+    /// use salzweg::{
+    ///     encoder::{Encoder, EncodingError},
+    ///     Endianness,
+    /// };
     ///
     /// fn main() -> Result<(), EncodingError> {
     ///     let data = [0, 0, 1, 3];
@@ -221,19 +227,6 @@ impl Encoder {
         let mut output = vec![];
         Encoder::encode(data, &mut output, code_size, endianness)?;
         Ok(output)
-    }
-
-    pub fn encode_fix<R: Read, W: Write>(
-        data: R,
-        into: W,
-        endianness: Endianness,
-    ) -> Result<(), EncodingError> {
-        match endianness {
-            Endianness::BigEndian => Encoder::inner_fix_encode(data, BigEndianWriter::new(into)),
-            Endianness::LittleEndian => {
-                Encoder::inner_fix_encode(data, LittleEndianWriter::new(into))
-            }
-        }
     }
 
     fn inner_encode<R: Read, B: BitWriter>(
@@ -305,11 +298,25 @@ impl Encoder {
 
         Ok(())
     }
+}
 
-    fn inner_fix_encode<R: Read, B: BitWriter>(
+pub struct FixedEncoder;
+
+impl FixedEncoder {
+    pub fn encode<R: Read, W: Write>(
         data: R,
-        bit_writer: B,
+        into: W,
+        endianness: Endianness,
     ) -> Result<(), EncodingError> {
+        match endianness {
+            Endianness::BigEndian => FixedEncoder::inner_encode(data, BigEndianWriter::new(into)),
+            Endianness::LittleEndian => {
+                FixedEncoder::inner_encode(data, LittleEndianWriter::new(into))
+            }
+        }
+    }
+
+    fn inner_encode<R: Read, B: BitWriter>(data: R, bit_writer: B) -> Result<(), EncodingError> {
         const WRITE_SIZE: u8 = 12;
 
         let mut bit_writer = bit_writer;
@@ -442,7 +449,7 @@ mod tests {
         ];
 
         let mut compressed = vec![];
-        Encoder::encode_fix(&data[..], &mut compressed, Endianness::LittleEndian).unwrap();
+        FixedEncoder::encode(&data[..], &mut compressed, Endianness::LittleEndian).unwrap();
         println!("{compressed:#02X?}");
 
         let expected = [
