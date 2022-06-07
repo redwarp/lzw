@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     io::{BigEndianReader, BitReader, LittleEndianReader},
-    CodeSizeIncrease, Endianness,
+    CodeSizeStrategy, Endianness,
 };
 
 /// The error type for decoding operations.
@@ -51,7 +51,7 @@ impl From<std::io::Error> for DecodingError {
 pub struct VariableDecoder;
 
 impl VariableDecoder {
-    /// Decode lzw using variable code size.
+    /// Decode lzw using variable code size. Generic implementation.
     ///
     /// # Arguments
     ///
@@ -61,8 +61,10 @@ impl VariableDecoder {
     ///   Initial code size correspond to the range of expected data.
     ///   For example, let's say we are compressing an ASCII string.
     ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
-    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities.
+    ///   The initial read size will be equal to code size + 1.
     /// * `endianness` - Bit ordering when reading compressed data.
+    /// * `code_size_strategy` - The strategy to use for increasing the code style.
     ///
     /// # Errors
     ///
@@ -72,7 +74,7 @@ impl VariableDecoder {
     /// ```
     /// use salzweg::{
     ///     decoder::{DecodingError, VariableDecoder},
-    ///     CodeSizeIncrease, Endianness,
+    ///     CodeSizeStrategy, Endianness,
     /// };
     ///
     /// fn main() -> Result<(), DecodingError> {
@@ -84,7 +86,7 @@ impl VariableDecoder {
     ///         &mut output,
     ///         2,
     ///         Endianness::LittleEndian,
-    ///         CodeSizeIncrease::Default,
+    ///         CodeSizeStrategy::Default,
     ///     )?;
     ///
     ///     assert_eq!(output, [0, 0, 1, 3]);
@@ -96,35 +98,39 @@ impl VariableDecoder {
         into: W,
         code_size: u8,
         endianness: Endianness,
-        code_size_increase: CodeSizeIncrease,
+        code_size_strategy: CodeSizeStrategy,
     ) -> Result<(), DecodingError> {
         match endianness {
             Endianness::BigEndian => VariableDecoder::inner_decode(
                 BigEndianReader::new(data),
                 into,
                 code_size,
-                code_size_increase,
+                code_size_strategy,
             ),
             Endianness::LittleEndian => VariableDecoder::inner_decode(
                 LittleEndianReader::new(data),
                 into,
                 code_size,
-                code_size_increase,
+                code_size_strategy,
             ),
         }
     }
 
-    /// Decode lzw using variable code size. Convenient wrapper that creates a [Vec<u8>] under the hood.
+    /// Decode lzw using variable code size.
+    /// Convenient wrapper that creates a [Vec<u8>] under the hood.
     ///
     /// # Arguments
     ///
-    /// * `data` - The source data to be decoded.
+    /// * `data` - The source data to be compressed.
     /// * `code_size` - Between 2 and 8, the initial code size to use.
     ///   Initial code size correspond to the range of expected data.
     ///   For example, let's say we are compressing an ASCII string.
     ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
-    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
-    /// * `endianness` - Bit ordering when reading compressed data.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities.
+    ///   It would then provide the best compression.
+    ///   The initial write size will be equal to code size + 1.
+    /// * `endianness` - Bit ordering when writing compressed data.
+    /// * `code_size_strategy` - The strategy to use for increasing the code style.
     ///
     /// # Errors
     ///
@@ -132,7 +138,7 @@ impl VariableDecoder {
     ///
     /// # Examples
     /// ```
-    /// use salzweg::CodeSizeIncrease;
+    /// use salzweg::CodeSizeStrategy;
     /// use salzweg::{
     ///     decoder::{DecodingError, VariableDecoder},
     ///     Endianness,
@@ -140,11 +146,12 @@ impl VariableDecoder {
     ///
     /// fn main() -> Result<(), DecodingError> {
     ///     let data = [0x04, 0x32, 0x05];
+    ///
     ///     let output = VariableDecoder::decode_to_vec(
     ///         &data[..],
     ///         2,
     ///         Endianness::LittleEndian,
-    ///         CodeSizeIncrease::Default,
+    ///         CodeSizeStrategy::Default,
     ///     )?;
     ///
     ///     assert_eq!(output, [0, 0, 1, 3]);
@@ -155,10 +162,10 @@ impl VariableDecoder {
         data: R,
         code_size: u8,
         endianness: Endianness,
-        code_size_increase: CodeSizeIncrease,
+        code_size_strategy: CodeSizeStrategy,
     ) -> Result<Vec<u8>, DecodingError> {
         let mut output = vec![];
-        VariableDecoder::decode(data, &mut output, code_size, endianness, code_size_increase)?;
+        VariableDecoder::decode(data, &mut output, code_size, endianness, code_size_strategy)?;
         Ok(output)
     }
 
@@ -166,7 +173,7 @@ impl VariableDecoder {
         bit_reader: B,
         into: W,
         code_size: u8,
-        code_size_increase: CodeSizeIncrease,
+        code_size_increase: CodeSizeStrategy,
     ) -> Result<(), DecodingError> {
         if !(2..=8).contains(&code_size) {
             return Err(DecodingError::CodeSize(code_size));
@@ -175,14 +182,15 @@ impl VariableDecoder {
 
         const TABLE_MAX_SIZE: usize = 4096;
         // The stack should be as big as the longest word that the dictionnary can have.
-        // The longuest word would be reached if by bad luck, each entry of the dictionnary is made of the
-        // previous entry, increasing in size each time. This size would be the biggest for the minimum code size of 2,
-        // as there would be more "free entry" in the table not corresponding to a single digit.
+        // The longuest word would be reached if by bad luck, each entry of the dictionnary is made
+        // of the previous entry, increasing in size each time. This size would be the biggest
+        // for the minimum code size of 2, as there would be more "free entry" in the table
+        // not corresponding to a single digit.
         // In effect, stack max size = 4096 - 2^2 - 2 entries for clear and EOF + 1.
         const STACK_MAX_SIZE: usize = 4091;
-        // In effect, our prefix and suffix is our decoding table, as each word can be expressed by a previous
-        // code (prefix), and the extra letter (suffix). We store the word length as well, it's useful
-        // to recreate the word stack.
+        // In effect, our prefix and suffix is our decoding table, as each word can be expressed
+        // by a previous code (prefix), and the extra letter (suffix). We store the word length
+        // as well, it's useful to recreate the word stack.
         let mut prefix: [u16; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
         let mut suffix: [u8; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
         let mut length: [usize; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
@@ -275,42 +283,209 @@ impl VariableDecoder {
     }
 }
 
-pub struct GifDecoder;
+/// LZW decoder tuned for GIF.
+///
+/// Its code size is between 2 and 8 included and the data will be read using little endian packing.
+pub struct GifStyleDecoder;
 
-impl GifDecoder {
+impl GifStyleDecoder {
+    /// Decode data with LZW, using GIF style variable encoding.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be decoded.
+    /// * `into` - The output where decoded data will be written.
+    /// * `code_size` - Between 2 and 8, the initial code size to use.
+    ///   Initial code size correspond to the range of expected data.
+    ///   For example, let's say we are compressing an ASCII string.
+    ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities.
+    ///   The initial read size will be equal to code size + 1.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error] or for unexpected codes or code sizes.
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{
+    ///     decoder::{DecodingError, GifStyleDecoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), DecodingError> {
+    ///     let data = [0x04, 0x32, 0x05];
+    ///     let mut output = vec![];
+    ///
+    ///     GifStyleDecoder::decode(&data[..], &mut output, 2)?;
+    ///
+    ///     assert_eq!(output, [0, 0, 1, 3]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn decode<R: Read, W: Write>(data: R, into: W, code_size: u8) -> Result<(), DecodingError> {
         VariableDecoder::inner_decode(
             LittleEndianReader::new(data),
             into,
             code_size,
-            CodeSizeIncrease::Default,
+            CodeSizeStrategy::Default,
         )
     }
 
+    /// Decode data with LZW, using GIF style variable encoding.
+    /// Convenient wrapper that creates a [Vec<u8>] under the hood.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be decoded.
+    /// * `into` - The output where decoded data will be written.
+    /// * `code_size` - Between 2 and 8, the initial code size to use.
+    ///   Initial code size correspond to the range of expected data.
+    ///   For example, let's say we are compressing an ASCII string.
+    ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities.
+    ///   The initial read size will be equal to code size + 1.
+    /// * `endianness` - Bit ordering when reading compressed data.
+    /// * `code_size_strategy` - The strategy to use for increasing the code style.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error] or for unexpected codes or code sizes.
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{
+    ///     decoder::{DecodingError, GifStyleDecoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), DecodingError> {
+    ///     let data = [0x04, 0x32, 0x05];
+    ///
+    ///     let output = GifStyleDecoder::decode_to_vec(&data[..], 2)?;
+    ///
+    ///     assert_eq!(output, [0, 0, 1, 3]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn decode_to_vec<R: Read>(data: R, code_size: u8) -> Result<Vec<u8>, DecodingError> {
         let mut output = vec![];
-        GifDecoder::decode(data, &mut output, code_size)?;
+        GifStyleDecoder::decode(data, &mut output, code_size)?;
         Ok(output)
     }
 }
 
-pub struct TiffDecoder;
+pub struct TiffStyleDecoder;
 
-impl TiffDecoder {
+impl TiffStyleDecoder {
+    /// LZW decoder tuned for TIFF.
+    ///
+    /// Variable code size, it starts at a read size of 9 bits, and will use big endian packing
+    /// when reading the data.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be decoded.
+    /// * `into` - The output where decoded data will be written.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error].
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{
+    ///     decoder::{DecodingError, TiffStyleDecoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), DecodingError> {
+    ///     let data = [0x80, 0x0, 0x0, 0x0, 0x10, 0x1c, 0x4];
+    ///     let mut output = vec![];
+    ///
+    ///     TiffStyleDecoder::decode(&data[..], &mut output)?;
+    ///
+    ///     assert_eq!(output, [0, 0, 1, 3]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn decode<R: Read, W: Write>(data: R, into: W) -> Result<(), DecodingError> {
-        VariableDecoder::inner_decode(BigEndianReader::new(data), into, 8, CodeSizeIncrease::Tiff)
+        VariableDecoder::inner_decode(BigEndianReader::new(data), into, 8, CodeSizeStrategy::Tiff)
     }
 
+    /// LZW decoder tuned for TIFF.
+    /// Convenient wrapper that creates a [Vec<u8>] under the hood.
+    ///
+    /// Variable code size, it starts at a read size of 9 bits, and will use big endian packing
+    /// when reading the data.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be decoded.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error] or for unexpected codes or code sizes.
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{
+    ///     decoder::{DecodingError, TiffStyleDecoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), DecodingError> {
+    ///     let data = [0x80, 0x0, 0x0, 0x0, 0x10, 0x1c, 0x4];
+    ///
+    ///     let output = TiffStyleDecoder::decode_to_vec(&data[..])?;
+    ///
+    ///     assert_eq!(output, [0, 0, 1, 3]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn decode_to_vec<R: Read>(data: R) -> Result<Vec<u8>, DecodingError> {
         let mut output = vec![];
-        TiffDecoder::decode(data, &mut output)?;
+        TiffStyleDecoder::decode(data, &mut output)?;
         Ok(output)
     }
 }
 
+/// LZW decoder writing fixed 12 bit codes.
+///
+/// There is no clear or end of information codes: As soon as the dictionary is full,
+/// we stop increasing its size.
 pub struct FixedDecoder;
 
 impl FixedDecoder {
+    /// Decompress data with LZW outputting fixed code of 12 bits.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be decoded.
+    /// * `into` - The output where decoded data will be written.
+    /// * `endianness` - Bit ordering when reading compressed data.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error].
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{
+    ///     decoder::{DecodingError, FixedDecoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), DecodingError> {
+    ///     let data = [0x0, 0x0, 0x0, 0x1, 0x30, 0x0];
+    ///     let mut output = vec![];
+    ///
+    ///     FixedDecoder::decode(&data[..], &mut output, Endianness::LittleEndian)?;
+    ///
+    ///     assert_eq!(output, [0, 0, 1, 3]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn decode<R: Read, W: Write>(
         data: R,
         into: W,
@@ -324,6 +499,34 @@ impl FixedDecoder {
         }
     }
 
+    /// Decompress data with LZW outputting fixed code of 12 bits.
+    /// Convenient wrapper that creates a [Vec<u8>] under the hood.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be decoded.
+    /// * `endianness` - Bit ordering when reading compressed data.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error].
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{
+    ///     decoder::{DecodingError, FixedDecoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), DecodingError> {
+    ///     let data = [0x0, 0x0, 0x0, 0x1, 0x30, 0x0];
+    ///
+    ///     let mut output = FixedDecoder::decode_to_vec(&data[..], Endianness::LittleEndian)?;
+    ///
+    ///     assert_eq!(output, [0, 0, 1, 3]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn decode_to_vec<R: Read>(
         data: R,
         endianness: Endianness,
@@ -337,15 +540,16 @@ impl FixedDecoder {
         let mut into = into;
 
         const TABLE_MAX_SIZE: usize = 4096;
-        // The stack should be as big as the longest word that the dictionnary can have.
-        // The longuest word would be reached if by bad luck, each entry of the dictionnary is made of the
-        // previous entry, increasing in size each time. This size would be the biggest for the minimum code size of 2,
+        // The stack should be as big as the longest word that the dictionary can have.
+        // The longest word would be reached if by bad luck, each entry of the dictionary is
+        // made of the previous entry, increasing in size each time.
+        // This size would be the biggest for the minimum code size of 2,
         // as there would be more "free entry" in the table not corresponding to a single digit.
         // In effect, stack max size = 4096 - 2^2 - 2 entries for clear and EOF + 1.
         const STACK_MAX_SIZE: usize = 4091;
-        // In effect, our prefix and suffix is our decoding table, as each word can be expressed by a previous
-        // code (prefix), and the extra letter (suffix). We store the word length as well, it's useful
-        // to recreate the word stack.
+        // In effect, our prefix and suffix is our decoding table, as each word can be expressed
+        // by a previous code (prefix), and the extra letter (suffix).
+        // We store the word length as well, it's useful to recreate the word stack.
         const READ_SIZE: u8 = 12;
 
         let mut prefix: [u16; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
@@ -436,7 +640,7 @@ mod tests {
             &mut decoded,
             2,
             Endianness::LittleEndian,
-            CodeSizeIncrease::Default,
+            CodeSizeStrategy::Default,
         )
         .unwrap();
 
@@ -462,7 +666,7 @@ mod tests {
             &mut decoded1,
             2,
             Endianness::LittleEndian,
-            CodeSizeIncrease::Default,
+            CodeSizeStrategy::Default,
         )
         .unwrap();
         VariableDecoder::decode(
@@ -470,7 +674,7 @@ mod tests {
             &mut decoded2,
             2,
             Endianness::LittleEndian,
-            CodeSizeIncrease::Default,
+            CodeSizeStrategy::Default,
         )
         .unwrap();
 
@@ -488,7 +692,7 @@ mod tests {
             &mut decoded,
             7,
             Endianness::LittleEndian,
-            CodeSizeIncrease::Default,
+            CodeSizeStrategy::Default,
         )
         .unwrap();
 
@@ -505,7 +709,7 @@ mod tests {
             into,
             10,
             Endianness::LittleEndian,
-            CodeSizeIncrease::Default,
+            CodeSizeStrategy::Default,
         )
         .err()
         .unwrap();

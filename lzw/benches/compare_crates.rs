@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
-use salzweg::CodeSizeIncrease;
+use salzweg::CodeSizeStrategy;
 use std::{fs::File, io::Write, path::Path};
 
 const LOREM_IPSUM: &[u8] = include_str!("../../test-assets/lorem_ipsum_long.txt").as_bytes();
@@ -31,7 +31,7 @@ pub fn encoding_text(c: &mut Criterion) {
                 std::io::sink(),
                 black_box(7),
                 salzweg::Endianness::LittleEndian,
-                CodeSizeIncrease::Default,
+                CodeSizeStrategy::Default,
             )
             .unwrap();
         })
@@ -63,7 +63,7 @@ pub fn encoding_random_data(c: &mut Criterion) {
                 std::io::sink(),
                 black_box(8),
                 salzweg::Endianness::LittleEndian,
-                CodeSizeIncrease::Default,
+                CodeSizeStrategy::Default,
             )
             .unwrap();
         })
@@ -95,7 +95,7 @@ pub fn encoding_image_data(c: &mut Criterion) {
                 std::io::sink(),
                 black_box(7),
                 salzweg::Endianness::LittleEndian,
-                CodeSizeIncrease::Default,
+                CodeSizeStrategy::Default,
             )
             .unwrap();
         })
@@ -148,7 +148,7 @@ pub fn decoding_text_to_vec_be(c: &mut Criterion) {
                 vec![],
                 black_box(7),
                 salzweg::Endianness::BigEndian,
-                CodeSizeIncrease::Default,
+                CodeSizeStrategy::Default,
             )
             .unwrap();
         })
@@ -175,7 +175,7 @@ where
                 into(),
                 black_box(code_size),
                 salzweg::Endianness::LittleEndian,
-                CodeSizeIncrease::Default,
+                CodeSizeStrategy::Default,
             )
             .unwrap();
         })
@@ -200,7 +200,7 @@ fn prepare_encoded_random_data() -> Vec<u8> {
         &mut output,
         8,
         salzweg::Endianness::LittleEndian,
-        CodeSizeIncrease::Default,
+        CodeSizeStrategy::Default,
     )
     .unwrap();
     output
@@ -231,7 +231,7 @@ fn prepare_encoded_image_data() -> Vec<u8> {
         &mut output,
         7,
         salzweg::Endianness::LittleEndian,
-        CodeSizeIncrease::Default,
+        CodeSizeStrategy::Default,
     )
     .unwrap();
 

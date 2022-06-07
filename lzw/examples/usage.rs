@@ -1,4 +1,4 @@
-use salzweg::{decoder::TiffDecoder, encoder::TiffStyleEncoder, CodeSizeIncrease};
+use salzweg::{decoder::TiffStyleDecoder, encoder::TiffStyleEncoder, CodeSizeStrategy};
 
 const LOREM_IPSUM: &str = include_str!("../../test-assets/lorem_ipsum.txt");
 const LOREM_IPSUM_LONG: &str = include_str!("../../test-assets/lorem_ipsum_long.txt");
@@ -25,7 +25,7 @@ fn check_string_compression(string: &str) {
         &mut compressed,
         7,
         salzweg::Endianness::LittleEndian,
-        CodeSizeIncrease::Default,
+        CodeSizeStrategy::Default,
     )
     .unwrap();
 
@@ -44,7 +44,7 @@ fn check_string_decoding(data: &[u8]) {
         &mut my_decompressed,
         7,
         salzweg::Endianness::LittleEndian,
-        CodeSizeIncrease::Default,
+        CodeSizeStrategy::Default,
     )
     .unwrap();
 
@@ -77,7 +77,7 @@ fn decode_colors() {
         &data[..],
         2,
         salzweg::Endianness::LittleEndian,
-        CodeSizeIncrease::Default,
+        CodeSizeStrategy::Default,
     )
     .unwrap();
 
@@ -94,7 +94,7 @@ fn check_tiff_encoding(string: &str) {
     let data = string.as_bytes();
     let compressed = TiffStyleEncoder::encode_to_vec(data).unwrap();
 
-    let decompressed = TiffDecoder::decode_to_vec(&compressed[..]).unwrap();
+    let decompressed = TiffStyleDecoder::decode_to_vec(&compressed[..]).unwrap();
 
     assert_eq!(data, decompressed);
 }

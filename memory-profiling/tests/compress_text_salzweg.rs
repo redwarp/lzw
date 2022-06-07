@@ -16,7 +16,7 @@ fn compress_text_salzweg() {
         &mut compressed,
         7,
         salzweg::Endianness::LittleEndian,
-        salzweg::CodeSizeIncrease::Default,
+        salzweg::CodeSizeStrategy::Default,
     )
     .unwrap();
 

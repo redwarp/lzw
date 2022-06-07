@@ -1,4 +1,4 @@
-use salzweg::CodeSizeIncrease;
+use salzweg::CodeSizeStrategy;
 
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
@@ -19,7 +19,7 @@ fn decompress_text_salzweg() {
         &mut decompressed,
         7,
         salzweg::Endianness::LittleEndian,
-        CodeSizeIncrease::Default,
+        CodeSizeStrategy::Default,
     )
     .unwrap();
 

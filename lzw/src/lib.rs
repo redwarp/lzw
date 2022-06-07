@@ -10,10 +10,11 @@
 //!
 //! # Examples
 //!
+//! ## Encoding GIF data
 //! ```
 //! use salzweg::{
-//!     decoder::{DecodingError, GifDecoder},
-//!     encoder::{EncodingError, GifEncoder},
+//!     decoder::{DecodingError, GifStyleDecoder},
+//!     encoder::{EncodingError, GifStyleEncoder},
 //!     Endianness,
 //! };
 //!
@@ -21,11 +22,11 @@
 //! let mut compressed = vec![];
 //! let mut decompressed = vec![];
 //!
-//! GifEncoder::encode(&data[..], &mut compressed, 2).unwrap();
+//! GifStyleEncoder::encode(&data[..], &mut compressed, 2).unwrap();
 //!
 //! assert_eq!(compressed, [0x04, 0x32, 0x05]);
 //!
-//! GifDecoder::decode(&compressed[..], &mut decompressed, 2).unwrap();
+//! GifStyleDecoder::decode(&compressed[..], &mut decompressed, 2).unwrap();
 //!
 //! assert_eq!(decompressed, data);
 //! ```
@@ -46,20 +47,28 @@ pub enum Endianness {
     LittleEndian,
 }
 
+/// Code size increase strategy.
+///
+/// For variable code size encoding, there is a difference between the strategy used
+/// by TIFF compared to GIF or other variable code LZW.
 #[derive(Debug)]
-pub enum CodeSizeIncrease {
+pub enum CodeSizeStrategy {
+    /// Default code size increase.
+    ///
+    /// The read and write size increase when the dictionary's size is equal to 2.pow2(code-size).
     Default,
+    /// Code size increase strategy for TIFF.
+    ///
+    /// The read and write size increase when the dictionary's size is equal
+    /// to 2.pow2(code-size) - 1.
     Tiff,
 }
 
-/// Code size increase policy.
-///
-/// For variable code size encoding, there is a difference between the strategy used by TIFF compared
-impl CodeSizeIncrease {
+impl CodeSizeStrategy {
     pub(crate) const fn increment(&self) -> u16 {
         match self {
-            CodeSizeIncrease::Default => 0,
-            CodeSizeIncrease::Tiff => 1,
+            CodeSizeStrategy::Default => 0,
+            CodeSizeStrategy::Tiff => 1,
         }
     }
 }

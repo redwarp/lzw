@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     io::{BigEndianWriter, BitWriter, LittleEndianWriter},
-    CodeSizeIncrease, Endianness,
+    CodeSizeStrategy, Endianness,
 };
 
 /// The error type for encoding operations.
@@ -21,7 +21,8 @@ pub enum EncodingError {
     ///
     /// For a code size of 4 for example,
     /// we expect the data to be between 0 and 2.pow(4) = 16.
-    /// If in the data, we would then try to encode 42, it would not be correct and we return this unexpected code error.
+    /// If in the data, we would then try to encode 42, it would not be correct and we return this
+    /// unexpected code error.
     UnexpectedCode { code: u8, code_size: u8 },
 }
 
@@ -57,7 +58,7 @@ enum Node {
 
 /// Inspired by trie: https://en.wikipedia.org/wiki/Trie
 /// Using this suggestion: https://dev.to/deciduously/no-more-tears-no-more-knots-arena-allocated-trees-in-rust-44k6
-struct Tree {
+pub(crate) struct Tree {
     nodes: Vec<Node>,
     code_size: u8,
     with_clear_code: bool,
@@ -133,12 +134,12 @@ impl Tree {
     }
 }
 
-/// LZW encoder with variable code size. Generic implementation.
+/// LZW encoder with variable code size. Generic implementation, prefer usage of
+/// the [GifStyleEncoder] or [TiffStyleEncoder] if they fit your needs better.
 pub struct VariableEncoder;
 
 impl VariableEncoder {
-    /// Encode lzw, with variable code size. Generic implementation, prefer usage of
-    /// the [GifEncoder] or [TiffEncoder] if they fit your needs better.
+    /// Encode lzw, with variable code size. Generic implementation
     ///
     /// # Arguments
     ///
@@ -148,8 +149,11 @@ impl VariableEncoder {
     ///   Initial code size correspond to the range of expected data.
     ///   For example, let's say we are compressing an ASCII string.
     ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
-    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities.
+    ///   It would then provide the best compression.
+    ///   The initial write size will be equal to code size + 1.
     /// * `endianness` - Bit ordering when writing compressed data.
+    /// * `code_size_strategy` - The strategy to use for increasing the code style.
     ///
     /// # Errors
     ///
@@ -159,7 +163,7 @@ impl VariableEncoder {
     /// ```
     /// use salzweg::{
     ///     encoder::{EncodingError, VariableEncoder},
-    ///     CodeSizeIncrease, Endianness,
+    ///     CodeSizeStrategy, Endianness,
     /// };
     ///
     /// fn main() -> Result<(), EncodingError> {
@@ -171,7 +175,7 @@ impl VariableEncoder {
     ///         &mut output,
     ///         2,
     ///         Endianness::LittleEndian,
-    ///         CodeSizeIncrease::Default,
+    ///         CodeSizeStrategy::Default,
     ///     )?;
     ///
     ///     assert_eq!(output, [0x04, 0x32, 0x05]);
@@ -183,25 +187,26 @@ impl VariableEncoder {
         into: W,
         code_size: u8,
         endianness: Endianness,
-        code_size_increase: CodeSizeIncrease,
+        code_size_strategy: CodeSizeStrategy,
     ) -> Result<(), EncodingError> {
         match endianness {
             Endianness::BigEndian => VariableEncoder::inner_encode(
                 data,
                 BigEndianWriter::new(into),
                 code_size,
-                code_size_increase,
+                code_size_strategy,
             ),
             Endianness::LittleEndian => VariableEncoder::inner_encode(
                 data,
                 LittleEndianWriter::new(into),
                 code_size,
-                code_size_increase,
+                code_size_strategy,
             ),
         }
     }
 
-    /// Encode lzw, with variable code size. Convenient wrapper that creates a [Vec<u8>] under the hood.
+    /// Encode lzw, with variable code size.
+    /// Convenient wrapper that creates a [Vec<u8>] under the hood.
     ///
     /// # Arguments
     ///
@@ -210,8 +215,11 @@ impl VariableEncoder {
     ///   Initial code size correspond to the range of expected data.
     ///   For example, let's say we are compressing an ASCII string.
     ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
-    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities.
+    ///   It would then provide the best compression.
+    ///   The initial write size will be equal to code size + 1.
     /// * `endianness` - Bit ordering when writing compressed data.
+    /// * `code_size_strategy` - The strategy to use for increasing the code style.
     ///
     /// # Errors
     ///
@@ -221,13 +229,17 @@ impl VariableEncoder {
     /// ```
     /// use salzweg::{
     ///     encoder::{EncodingError, VariableEncoder},
-    ///     Endianness,
+    ///     CodeSizeStrategy, Endianness,
     /// };
     ///
     /// fn main() -> Result<(), EncodingError> {
     ///     let data = [0, 0, 1, 3];
-    ///
-    ///     let output = VariableEncoder::encode_to_vec(&data[..], 2, Endianness::LittleEndian)?;
+    ///     let output = VariableEncoder::encode_to_vec(
+    ///         &data[..],
+    ///         2,
+    ///         Endianness::LittleEndian,
+    ///         CodeSizeStrategy::Default,
+    ///     )?;
     ///
     ///     assert_eq!(output, [0x04, 0x32, 0x05]);
     ///     Ok(())
@@ -237,15 +249,10 @@ impl VariableEncoder {
         data: R,
         code_size: u8,
         endianness: Endianness,
+        code_size_strategy: CodeSizeStrategy,
     ) -> Result<Vec<u8>, EncodingError> {
         let mut output = vec![];
-        VariableEncoder::encode(
-            data,
-            &mut output,
-            code_size,
-            endianness,
-            CodeSizeIncrease::Default,
-        )?;
+        VariableEncoder::encode(data, &mut output, code_size, endianness, code_size_strategy)?;
         Ok(output)
     }
 
@@ -253,7 +260,7 @@ impl VariableEncoder {
         data: R,
         bit_writer: B,
         code_size: u8,
-        code_size_increase: CodeSizeIncrease,
+        code_size_increase: CodeSizeStrategy,
     ) -> Result<(), EncodingError> {
         if !(2..=8).contains(&code_size) {
             return Err(EncodingError::CodeSize(code_size));
@@ -324,19 +331,89 @@ impl VariableEncoder {
 /// LZW encoder tuned for GIF.
 ///
 /// Its code size is between 2 and 8 included, and the data will be
-/// written using little endian packing in the output stream.
+/// written using little endian packing in the output [std::io::Write].
 pub struct GifStyleEncoder;
 
 impl GifStyleEncoder {
+    /// Compress data with LZW, using GIF style variable encoding.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be compressed.
+    /// * `into` - The output where compressed data should be written.
+    /// * `code_size` - Between 2 and 8, the initial code size to use.
+    ///   Initial code size correspond to the range of expected data.
+    ///   For example, let's say we are compressing an ASCII string.
+    ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities.
+    ///   It would then provide the best compression.
+    ///   The initial write size will be equal to code size + 1.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error], unexpected codes or code sizes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use salzweg::{
+    ///     encoder::{EncodingError, GifStyleEncoder, VariableEncoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), EncodingError> {
+    ///     let data = [0, 0, 1, 3];
+    ///     let mut output = vec![];
+    ///
+    ///     GifStyleEncoder::encode(&data[..], &mut output, 2)?;
+    ///
+    ///     assert_eq!(output, [0x04, 0x32, 0x05]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn encode<R: Read, W: Write>(data: R, into: W, code_size: u8) -> Result<(), EncodingError> {
         VariableEncoder::inner_encode(
             data,
             LittleEndianWriter::new(into),
             code_size,
-            CodeSizeIncrease::Default,
+            CodeSizeStrategy::Default,
         )
     }
 
+    /// Compress data with LZW, using GIF style variable encoding.
+    /// Convenient wrapper that creates a [Vec<u8>] under the hood.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be compressed.
+    /// * `code_size` - Between 2 and 8, the initial code size to use.
+    ///   Initial code size correspond to the range of expected data.
+    ///   For example, let's say we are compressing an ASCII string.
+    ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
+    ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities.
+    ///   It would then provide the best compression.
+    ///   The initial write size will be equal to code size + 1.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error], unexpected codes or code sizes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use salzweg::{
+    ///     encoder::{EncodingError, GifStyleEncoder, VariableEncoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), EncodingError> {
+    ///     let data = [0, 0, 1, 3];
+    ///     let output = GifStyleEncoder::encode_to_vec(&data[..], 2)?;
+    ///
+    ///     assert_eq!(output, [0x04, 0x32, 0x05]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn encode_to_vec<R: Read>(data: R, code_size: u8) -> Result<Vec<u8>, EncodingError> {
         let mut output = vec![];
         GifStyleEncoder::encode(data, &mut output, code_size)?;
@@ -346,14 +423,75 @@ impl GifStyleEncoder {
 
 /// LZW encoder tuned for TIFF.
 ///
-/// Variable code size, it starts at a write size of 9 bits, and we will use big endian packing in the output stream.
+/// Variable code size, it starts at a write size of 9 bits, and will use big endian packing
+/// in the output [std::io::Write].
 pub struct TiffStyleEncoder;
 
 impl TiffStyleEncoder {
+    /// Encode lzw, with variable code size, using the TIFF style.
+    ///
+    /// Code write size will start at 9, and be written in big endian ordering.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be compressed.
+    /// * `into` - The output where compressed data should be written.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error].
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{
+    ///     encoder::{EncodingError, TiffStyleEncoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), EncodingError> {
+    ///     let data = [0, 0, 1, 3];
+    ///     let mut output = vec![];
+    ///
+    ///     TiffStyleEncoder::encode(&data[..], &mut output)?;
+    ///
+    ///     assert_eq!(output, [0x80, 0x0, 0x0, 0x0, 0x10, 0x1c, 0x4]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn encode<R: Read, W: Write>(data: R, into: W) -> Result<(), EncodingError> {
-        VariableEncoder::inner_encode(data, BigEndianWriter::new(into), 8, CodeSizeIncrease::Tiff)
+        VariableEncoder::inner_encode(data, BigEndianWriter::new(into), 8, CodeSizeStrategy::Tiff)
     }
 
+    /// Encode lzw, with variable code size, using the TIFF style.
+    /// Convenient wrapper that creates a [Vec<u8>] under the hood.
+    ///
+    /// Code write size will start at 9, and be written in big endian ordering.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be compressed.
+    /// * `into` - The output where compressed data should be written.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error].
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{
+    ///     encoder::{EncodingError, TiffStyleEncoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), EncodingError> {
+    ///     let data = [0, 0, 1, 3];
+    ///
+    ///     let output = TiffStyleEncoder::encode_to_vec(&data[..])?;
+    ///
+    ///     assert_eq!(output, [0x80, 0x0, 0x0, 0x0, 0x10, 0x1c, 0x4]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn encode_to_vec<R: Read>(data: R) -> Result<Vec<u8>, EncodingError> {
         let mut output = vec![];
         TiffStyleEncoder::encode(data, &mut output)?;
@@ -363,10 +501,43 @@ impl TiffStyleEncoder {
 
 /// LZW encoder writing fixed 12 bit codes.
 ///
-/// There is no clear or end of information codes: As soon as the dictionnary is full, we stop increasing its size.
+/// There is no clear or end of information codes: As soon as the dictionary is full,
+/// we stop increasing its size.
 pub struct FixedEncoder;
 
 impl FixedEncoder {
+    /// Compress data with LZW outputting fixed code of 12 bits.
+    ///
+    /// For really small amount data like the one showcased in the example, the compressed might
+    /// take more space than the original data. Variable code size compression is generally better.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be compressed.
+    /// * `into` - The output where compressed data should be written.
+    /// * `endianness` - Bit ordering when writing compressed data.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error].
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{
+    ///     encoder::{EncodingError, FixedEncoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), EncodingError> {
+    ///     let data = [0, 0, 1, 3];
+    ///     let mut output = vec![];
+    ///
+    ///     FixedEncoder::encode(&data[..], &mut output, Endianness::LittleEndian)?;
+    ///
+    ///     assert_eq!(output, [0x0, 0x0, 0x0, 0x1, 0x30, 0x0]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn encode<R: Read, W: Write>(
         data: R,
         into: W,
@@ -380,6 +551,37 @@ impl FixedEncoder {
         }
     }
 
+    /// Compress data with LZW outputting fixed code of 12 bits.
+    /// Convenient wrapper that creates a [Vec<u8>] under the hood.
+    ///
+    /// For really small amount data like the one showcased in the example, the compressed might
+    /// take more space than the original data. Variable code size compression is generally better.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The source data to be compressed.
+    /// * `endianness` - Bit ordering when writing compressed data.
+    ///
+    /// # Errors
+    ///
+    /// This function can fail on an [std::io::Error].
+    ///
+    /// # Examples
+    /// ```
+    /// use salzweg::{
+    ///     encoder::{EncodingError, FixedEncoder},
+    ///     CodeSizeStrategy, Endianness,
+    /// };
+    ///
+    /// fn main() -> Result<(), EncodingError> {
+    ///     let data = [0, 0, 1, 3];
+    ///
+    ///     let output = FixedEncoder::encode_to_vec(&data[..], Endianness::LittleEndian)?;
+    ///
+    ///     assert_eq!(output, [0x0, 0x0, 0x0, 0x1, 0x30, 0x0]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn encode_to_vec<R: Read>(
         data: R,
         endianness: Endianness,
@@ -448,7 +650,7 @@ mod tests {
             &mut compressed,
             2,
             Endianness::LittleEndian,
-            CodeSizeIncrease::Default,
+            CodeSizeStrategy::Default,
         )
         .unwrap();
 
@@ -468,10 +670,20 @@ mod tests {
             &mut compressed,
             2,
             Endianness::LittleEndian,
-            CodeSizeIncrease::Default,
+            CodeSizeStrategy::Default,
         )
         .unwrap();
         assert_eq!(compressed, [0x04, 0x32, 0x05,])
+    }
+
+    #[test]
+    fn encode_few_bytes_gif() -> Result<(), EncodingError> {
+        let data = [0, 0, 1, 3];
+
+        let compressed = GifStyleEncoder::encode_to_vec(&data[..], 2)?;
+        assert_eq!(compressed, [0x04, 0x32, 0x05,]);
+
+        Ok(())
     }
 
     #[test]
@@ -481,10 +693,20 @@ mod tests {
             2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
         ];
 
-        let compression1 =
-            VariableEncoder::encode_to_vec(&data[..], 2, Endianness::LittleEndian).unwrap();
-        let compression2 =
-            VariableEncoder::encode_to_vec(&data[..], 2, Endianness::LittleEndian).unwrap();
+        let compression1 = VariableEncoder::encode_to_vec(
+            &data[..],
+            2,
+            Endianness::LittleEndian,
+            CodeSizeStrategy::Default,
+        )
+        .unwrap();
+        let compression2 = VariableEncoder::encode_to_vec(
+            &data[..],
+            2,
+            Endianness::LittleEndian,
+            CodeSizeStrategy::Default,
+        )
+        .unwrap();
 
         assert_eq!(compression1, compression2);
     }
@@ -500,7 +722,7 @@ mod tests {
             &mut compressed,
             7,
             Endianness::LittleEndian,
-            CodeSizeIncrease::Default,
+            CodeSizeStrategy::Default,
         )
         .unwrap();
 
@@ -517,7 +739,7 @@ mod tests {
             into,
             10,
             Endianness::LittleEndian,
-            CodeSizeIncrease::Default,
+            CodeSizeStrategy::Default,
         )
         .err()
         .unwrap();
@@ -530,9 +752,14 @@ mod tests {
     fn wrong_data_for_code_size() {
         let data = [0, 1, 8, 3];
 
-        let result = VariableEncoder::encode_to_vec(&data[..], 2, Endianness::BigEndian)
-            .err()
-            .unwrap();
+        let result = VariableEncoder::encode_to_vec(
+            &data[..],
+            2,
+            Endianness::BigEndian,
+            CodeSizeStrategy::Default,
+        )
+        .err()
+        .unwrap();
         let expected = EncodingError::UnexpectedCode {
             code: 8,
             code_size: 2,
@@ -558,5 +785,27 @@ mod tests {
             0x11, 0x0, 0x8, 0x91, 0x10, 0x0, 0x1, 0x0, 0xF, 0x1, 0x0, 0x4, 0x1,
         ];
         assert_eq!(compressed, expected)
+    }
+
+    #[test]
+    fn encode_few_bytes_fix() -> Result<(), EncodingError> {
+        let data = [0, 0, 1, 3];
+
+        let compressed = FixedEncoder::encode_to_vec(&data[..], Endianness::LittleEndian)?;
+
+        assert_eq!(compressed, [0x0, 0x0, 0x0, 0x1, 0x30, 0x0]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn encode_few_bytes_tiff() -> Result<(), EncodingError> {
+        let data = [0, 0, 1, 3];
+
+        let compressed = TiffStyleEncoder::encode_to_vec(&data[..])?;
+
+        assert_eq!(compressed, [0x80, 0x0, 0x0, 0x0, 0x10, 0x1c, 0x4]);
+
+        Ok(())
     }
 }
