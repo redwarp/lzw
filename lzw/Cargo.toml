@@ -1,6 +1,6 @@
 [package]
 name = "salzweg"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Redwarp <redwarp@gmail.com>"]
 edition = "2021"
 description = "A LZW encoder and decoder, fast and memory efficient"
