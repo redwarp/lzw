@@ -325,9 +325,9 @@ impl VariableEncoder {
 ///
 /// Its code size is between 2 and 8 included, and the data will be
 /// written using little endian packing in the output stream.
-pub struct GifEncoder;
+pub struct GifStyleEncoder;
 
-impl GifEncoder {
+impl GifStyleEncoder {
     pub fn encode<R: Read, W: Write>(data: R, into: W, code_size: u8) -> Result<(), EncodingError> {
         VariableEncoder::inner_encode(
             data,
@@ -339,7 +339,7 @@ impl GifEncoder {
 
     pub fn encode_to_vec<R: Read>(data: R, code_size: u8) -> Result<Vec<u8>, EncodingError> {
         let mut output = vec![];
-        GifEncoder::encode(data, &mut output, code_size)?;
+        GifStyleEncoder::encode(data, &mut output, code_size)?;
         Ok(output)
     }
 }
@@ -347,16 +347,16 @@ impl GifEncoder {
 /// LZW encoder tuned for TIFF.
 ///
 /// Variable code size, it starts at a write size of 9 bits, and we will use big endian packing in the output stream.
-pub struct TiffEncoder;
+pub struct TiffStyleEncoder;
 
-impl TiffEncoder {
+impl TiffStyleEncoder {
     pub fn encode<R: Read, W: Write>(data: R, into: W) -> Result<(), EncodingError> {
         VariableEncoder::inner_encode(data, BigEndianWriter::new(into), 8, CodeSizeIncrease::Tiff)
     }
 
     pub fn encode_to_vec<R: Read>(data: R) -> Result<Vec<u8>, EncodingError> {
         let mut output = vec![];
-        TiffEncoder::encode(data, &mut output)?;
+        TiffStyleEncoder::encode(data, &mut output)?;
         Ok(output)
     }
 }

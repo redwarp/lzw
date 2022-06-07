@@ -1,4 +1,4 @@
-use salzweg::{decoder::TiffDecoder, encoder::TiffEncoder, CodeSizeIncrease};
+use salzweg::{decoder::TiffDecoder, encoder::TiffStyleEncoder, CodeSizeIncrease};
 
 const LOREM_IPSUM: &str = include_str!("../../test-assets/lorem_ipsum.txt");
 const LOREM_IPSUM_LONG: &str = include_str!("../../test-assets/lorem_ipsum_long.txt");
@@ -92,7 +92,7 @@ fn decode_colors() {
 
 fn check_tiff_encoding(string: &str) {
     let data = string.as_bytes();
-    let compressed = TiffEncoder::encode_to_vec(data).unwrap();
+    let compressed = TiffStyleEncoder::encode_to_vec(data).unwrap();
 
     let decompressed = TiffDecoder::decode_to_vec(&compressed[..]).unwrap();
 

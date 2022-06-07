@@ -52,6 +52,9 @@ pub enum CodeSizeIncrease {
     Tiff,
 }
 
+/// Code size increase policy.
+///
+/// For variable code size encoding, there is a difference between the strategy used by TIFF compared
 impl CodeSizeIncrease {
     pub(crate) const fn increment(&self) -> u16 {
         match self {
