@@ -141,10 +141,9 @@ impl VariableDecoder {
     ///
     /// # Examples
     /// ```
-    /// use salzweg::CodeSizeStrategy;
     /// use salzweg::{
     ///     decoder::{DecodingError, VariableDecoder},
-    ///     Endianness,
+    ///     CodeSizeStrategy, Endianness,
     /// };
     ///
     /// fn main() -> Result<(), DecodingError> {

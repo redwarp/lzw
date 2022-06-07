@@ -33,10 +33,8 @@
 //!
 //! ## Compressing a file using the TIFF variation
 //! ```
-//! use salzweg::decoder::TiffStyleDecoder;
 //! use salzweg::encoder::TiffStyleEncoder;
-//! use std::fs::File;
-//! use std::io::BufReader;
+//! use std::{fs::File, io::BufReader};
 //!
 //! let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
 //!     .parent()
