@@ -1,3 +1,5 @@
+//! Contains the implementation of fixed and variable code length encoders.
+
 use std::{
     fmt::Display,
     io::{Read, Write},

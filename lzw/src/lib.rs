@@ -30,6 +30,25 @@
 //!
 //! assert_eq!(decompressed, data);
 //! ```
+//!
+//! ## Compressing a file using the TIFF variation
+//! ```
+//! use salzweg::decoder::TiffStyleDecoder;
+//! use salzweg::encoder::TiffStyleEncoder;
+//! use std::fs::File;
+//! use std::io::BufReader;
+//!
+//! let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+//!     .parent()
+//!     .unwrap()
+//!     .join("test-assets/lorem_ipsum.txt");
+//!
+//! let output_file = std::io::sink(); // Let's pretend this is a file.
+//!
+//! let data = BufReader::new(File::open(path).unwrap());
+//!
+//! TiffStyleEncoder::encode(data, output_file).unwrap();
+//! ```
 
 pub mod decoder;
 pub mod encoder;

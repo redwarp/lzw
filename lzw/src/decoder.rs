@@ -1,3 +1,5 @@
+//! Contains the implementation of fixed and variable code length decoders.
+
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
@@ -47,7 +49,8 @@ impl From<std::io::Error> for DecodingError {
     }
 }
 
-/// LZW decoder.
+/// LZW decoder with variable code size. Generic implementation, prefer usage of
+/// the [GifStyleDecoder] or [TiffStyleDecoder] if they fit your needs better.
 pub struct VariableDecoder;
 
 impl VariableDecoder {
@@ -375,13 +378,14 @@ impl GifStyleDecoder {
     }
 }
 
+/// LZW decoder tuned for TIFF.
+///
+/// Variable code size, it starts at a read size of 9 bits, and will use big endian packing
+/// when reading the data.
 pub struct TiffStyleDecoder;
 
 impl TiffStyleDecoder {
-    /// LZW decoder tuned for TIFF.
-    ///
-    /// Variable code size, it starts at a read size of 9 bits, and will use big endian packing
-    /// when reading the data.
+    /// Decode data with LZW, using TIFF style variable encoding.
     ///
     /// # Arguments
     ///
@@ -413,7 +417,7 @@ impl TiffStyleDecoder {
         VariableDecoder::inner_decode(BigEndianReader::new(data), into, 8, CodeSizeStrategy::Tiff)
     }
 
-    /// LZW decoder tuned for TIFF.
+    /// Decode data with LZW, using TIFF style variable encoding.
     /// Convenient wrapper that creates a [Vec<u8>] under the hood.
     ///
     /// Variable code size, it starts at a read size of 9 bits, and will use big endian packing
