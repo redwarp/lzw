@@ -1,18 +1,19 @@
-//! LZW encoder and decoder, GIF flavored.
+//! LZW encoder and decoder.
 //!
 //! This crate provides a Encoder and Decoder to compress and decompress LZW data.
-//! This particular implementation provides the gif variation of LZW, using variable code size.
+//! This particular implementation provides the gif variation of LZW, using variable code size,
+//!  as well as the TIFF variation, or the original 12 bit fixed sized LZW variation.
 //!
 //! It's fast, and use limited memory to do so: the decoder only uses the stack.
 //!
-//! It also work with any [std::io::Read] and [std::io::Write].
+//! It works with any [std::io::Read] and [std::io::Write].
 //!
 //! # Examples
 //!
 //! ```
 //! use salzweg::{
-//!     decoder::{Decoder, DecodingError},
-//!     encoder::{Encoder, EncodingError},
+//!     decoder::{DecodingError, GifDecoder},
+//!     encoder::{EncodingError, GifEncoder},
 //!     Endianness,
 //! };
 //!
@@ -20,11 +21,11 @@
 //! let mut compressed = vec![];
 //! let mut decompressed = vec![];
 //!
-//! Encoder::encode(&data[..], &mut compressed, 2, Endianness::LittleEndian).unwrap();
+//! GifEncoder::encode(&data[..], &mut compressed, 2).unwrap();
 //!
 //! assert_eq!(compressed, [0x04, 0x32, 0x05]);
 //!
-//! Decoder::decode(&compressed[..], &mut decompressed, 2, Endianness::LittleEndian).unwrap();
+//! GifDecoder::decode(&compressed[..], &mut decompressed, 2).unwrap();
 //!
 //! assert_eq!(decompressed, data);
 //! ```
@@ -37,10 +38,25 @@ mod io;
 ///
 /// This crate currently only supports the GIF variation and GIF typically use little endian,
 /// but big endian still works.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub enum Endianness {
     /// Most significant order.
     BigEndian,
     /// Least significant order.
     LittleEndian,
+}
+
+#[derive(Debug)]
+pub enum CodeSizeIncrease {
+    Default,
+    Tiff,
+}
+
+impl CodeSizeIncrease {
+    pub(crate) const fn increment(&self) -> u16 {
+        match self {
+            CodeSizeIncrease::Default => 0,
+            CodeSizeIncrease::Tiff => 1,
+        }
+    }
 }

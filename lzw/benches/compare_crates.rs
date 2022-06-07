@@ -1,5 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
+use salzweg::CodeSizeIncrease;
 use std::{fs::File, io::Write, path::Path};
 
 const LOREM_IPSUM: &[u8] = include_str!("../../test-assets/lorem_ipsum_long.txt").as_bytes();
@@ -25,11 +26,12 @@ pub fn encoding_text(c: &mut Criterion) {
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
-            salzweg::encoder::Encoder::encode(
+            salzweg::encoder::VariableEncoder::encode(
                 LOREM_IPSUM,
                 std::io::sink(),
                 black_box(7),
                 salzweg::Endianness::LittleEndian,
+                CodeSizeIncrease::Default,
             )
             .unwrap();
         })
@@ -56,11 +58,12 @@ pub fn encoding_random_data(c: &mut Criterion) {
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
-            salzweg::encoder::Encoder::encode(
+            salzweg::encoder::VariableEncoder::encode(
                 &data[..],
                 std::io::sink(),
                 black_box(8),
                 salzweg::Endianness::LittleEndian,
+                CodeSizeIncrease::Default,
             )
             .unwrap();
         })
@@ -87,11 +90,12 @@ pub fn encoding_image_data(c: &mut Criterion) {
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
-            salzweg::encoder::Encoder::encode(
+            salzweg::encoder::VariableEncoder::encode(
                 &data[..],
                 std::io::sink(),
                 black_box(7),
                 salzweg::Endianness::LittleEndian,
+                CodeSizeIncrease::Default,
             )
             .unwrap();
         })
@@ -139,11 +143,12 @@ pub fn decoding_text_to_vec_be(c: &mut Criterion) {
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
-            salzweg::decoder::Decoder::decode(
+            salzweg::decoder::VariableDecoder::decode(
                 LOREM_IPSUM_ENCODED_BE,
                 vec![],
                 black_box(7),
                 salzweg::Endianness::BigEndian,
+                CodeSizeIncrease::Default,
             )
             .unwrap();
         })
@@ -165,11 +170,12 @@ where
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
-            salzweg::decoder::Decoder::decode(
+            salzweg::decoder::VariableDecoder::decode(
                 data,
                 into(),
                 black_box(code_size),
                 salzweg::Endianness::LittleEndian,
+                CodeSizeIncrease::Default,
             )
             .unwrap();
         })
@@ -189,8 +195,14 @@ fn prepare_encoded_random_data() -> Vec<u8> {
 
     let mut output = vec![];
 
-    salzweg::encoder::Encoder::encode(&data[..], &mut output, 8, salzweg::Endianness::LittleEndian)
-        .unwrap();
+    salzweg::encoder::VariableEncoder::encode(
+        &data[..],
+        &mut output,
+        8,
+        salzweg::Endianness::LittleEndian,
+        CodeSizeIncrease::Default,
+    )
+    .unwrap();
     output
 }
 
@@ -214,8 +226,14 @@ fn prepare_encoded_image_data() -> Vec<u8> {
 
     let mut output = vec![];
 
-    salzweg::encoder::Encoder::encode(&data[..], &mut output, 7, salzweg::Endianness::LittleEndian)
-        .unwrap();
+    salzweg::encoder::VariableEncoder::encode(
+        &data[..],
+        &mut output,
+        7,
+        salzweg::Endianness::LittleEndian,
+        CodeSizeIncrease::Default,
+    )
+    .unwrap();
 
     output
 }

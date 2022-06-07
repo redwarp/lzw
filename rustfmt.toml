@@ -1,0 +1,2 @@
+# Formating code in the docs, use cargo +nightly fmt, after uncommenting the next line.
+# format_code_in_doc_comments = true

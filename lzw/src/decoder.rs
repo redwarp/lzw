@@ -6,19 +6,19 @@ use std::{
 
 use crate::{
     io::{BigEndianReader, BitReader, LittleEndianReader},
-    Endianness,
+    CodeSizeIncrease, Endianness,
 };
 
 /// The error type for decoding operations.
 #[derive(Debug)]
 pub enum DecodingError {
-    /// An I/O error happend when reading or writing data.
+    /// An I/O error happened when reading or writing data.
     Io(std::io::Error),
     /// Code size out of bounds. It should be between 2 and 8 included.
     CodeSize(u8),
     /// Unexpected code read in the data.
     UnexpectedCode(u16),
-    /// If the dictionnary grows past size 4096, an expected clear code is missing.
+    /// If the dictionary grows past size 4096, an expected clear code is missing.
     MissingClearCode,
 }
 
@@ -48,9 +48,9 @@ impl From<std::io::Error> for DecodingError {
 }
 
 /// LZW decoder.
-pub struct Decoder;
+pub struct VariableDecoder;
 
-impl Decoder {
+impl VariableDecoder {
     /// Decode lzw using variable code size.
     ///
     /// # Arguments
@@ -62,7 +62,7 @@ impl Decoder {
     ///   For example, let's say we are compressing an ASCII string.
     ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
     ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
-    /// * `endianess` - Bit ordering when reading compressed data.
+    /// * `endianness` - Bit ordering when reading compressed data.
     ///
     /// # Errors
     ///
@@ -71,15 +71,21 @@ impl Decoder {
     /// # Examples
     /// ```
     /// use salzweg::{
-    ///     decoder::{Decoder, DecodingError},
-    ///     Endianness,
+    ///     decoder::{DecodingError, VariableDecoder},
+    ///     CodeSizeIncrease, Endianness,
     /// };
     ///
     /// fn main() -> Result<(), DecodingError> {
     ///     let data = [0x04, 0x32, 0x05];
     ///     let mut output = vec![];
     ///
-    ///     Decoder::decode(&data[..], &mut output, 2, Endianness::LittleEndian)?;
+    ///     VariableDecoder::decode(
+    ///         &data[..],
+    ///         &mut output,
+    ///         2,
+    ///         Endianness::LittleEndian,
+    ///         CodeSizeIncrease::Default,
+    ///     )?;
     ///
     ///     assert_eq!(output, [0, 0, 1, 3]);
     ///     Ok(())
@@ -90,14 +96,21 @@ impl Decoder {
         into: W,
         code_size: u8,
         endianness: Endianness,
+        code_size_increase: CodeSizeIncrease,
     ) -> Result<(), DecodingError> {
         match endianness {
-            Endianness::BigEndian => {
-                Decoder::inner_decode(BigEndianReader::new(data), into, code_size)
-            }
-            Endianness::LittleEndian => {
-                Decoder::inner_decode(LittleEndianReader::new(data), into, code_size)
-            }
+            Endianness::BigEndian => VariableDecoder::inner_decode(
+                BigEndianReader::new(data),
+                into,
+                code_size,
+                code_size_increase,
+            ),
+            Endianness::LittleEndian => VariableDecoder::inner_decode(
+                LittleEndianReader::new(data),
+                into,
+                code_size,
+                code_size_increase,
+            ),
         }
     }
 
@@ -111,7 +124,7 @@ impl Decoder {
     ///   For example, let's say we are compressing an ASCII string.
     ///   An ASCII string consist of bytes with values between 0 and 127, so 128 possibilities.
     ///   A code size of 7 means that we expect 2.pow(7) == 128 possibilities. It would then provide the best compression.
-    /// * `endianess` - Bit ordering when reading compressed data.
+    /// * `endianness` - Bit ordering when reading compressed data.
     ///
     /// # Errors
     ///
@@ -119,15 +132,20 @@ impl Decoder {
     ///
     /// # Examples
     /// ```
+    /// use salzweg::CodeSizeIncrease;
     /// use salzweg::{
-    ///     decoder::{Decoder, DecodingError},
+    ///     decoder::{DecodingError, VariableDecoder},
     ///     Endianness,
     /// };
     ///
     /// fn main() -> Result<(), DecodingError> {
     ///     let data = [0x04, 0x32, 0x05];
-    ///
-    ///     let output = Decoder::decode_to_vec(&data[..], 2, Endianness::LittleEndian)?;
+    ///     let output = VariableDecoder::decode_to_vec(
+    ///         &data[..],
+    ///         2,
+    ///         Endianness::LittleEndian,
+    ///         CodeSizeIncrease::Default,
+    ///     )?;
     ///
     ///     assert_eq!(output, [0, 0, 1, 3]);
     ///     Ok(())
@@ -137,9 +155,10 @@ impl Decoder {
         data: R,
         code_size: u8,
         endianness: Endianness,
+        code_size_increase: CodeSizeIncrease,
     ) -> Result<Vec<u8>, DecodingError> {
         let mut output = vec![];
-        Decoder::decode(data, &mut output, code_size, endianness)?;
+        VariableDecoder::decode(data, &mut output, code_size, endianness, code_size_increase)?;
         Ok(output)
     }
 
@@ -147,6 +166,7 @@ impl Decoder {
         bit_reader: B,
         into: W,
         code_size: u8,
+        code_size_increase: CodeSizeIncrease,
     ) -> Result<(), DecodingError> {
         if !(2..=8).contains(&code_size) {
             return Err(DecodingError::CodeSize(code_size));
@@ -179,7 +199,7 @@ impl Decoder {
         let clear_code = 1 << code_size;
         let end_of_information = clear_code + 1;
 
-        let mut mask = (1 << read_size) - 1;
+        let mut size_increase_mask = (1 << read_size) - code_size_increase.increment();
         let mut next_index = clear_code + 2;
         let mut previous_code: Option<u16> = None;
         let mut bit_reader = bit_reader;
@@ -190,7 +210,7 @@ impl Decoder {
 
             if code == clear_code {
                 read_size = code_size + 1;
-                mask = (1 << read_size) - 1;
+                size_increase_mask = (1 << read_size) - code_size_increase.increment();
                 next_index = clear_code + 2;
                 previous_code = None;
                 continue;
@@ -239,9 +259,9 @@ impl Decoder {
                 suffix[next_index as usize] = decoding_stack[0];
                 length[next_index as usize] = length[previous_code.unwrap() as usize] + 1;
                 next_index += 1;
-                if next_index & mask == 0 && next_index < TABLE_MAX_SIZE as u16 {
+                if next_index == size_increase_mask && read_size < 12 {
                     read_size += 1;
-                    mask += next_index;
+                    size_increase_mask = (1 << read_size) - code_size_increase.increment();
                 }
             } else {
                 return Err(DecodingError::MissingClearCode);
@@ -252,6 +272,39 @@ impl Decoder {
         into.flush()?;
 
         Ok(())
+    }
+}
+
+pub struct GifDecoder;
+
+impl GifDecoder {
+    pub fn decode<R: Read, W: Write>(data: R, into: W, code_size: u8) -> Result<(), DecodingError> {
+        VariableDecoder::inner_decode(
+            LittleEndianReader::new(data),
+            into,
+            code_size,
+            CodeSizeIncrease::Default,
+        )
+    }
+
+    pub fn decode_to_vec<R: Read>(data: R, code_size: u8) -> Result<Vec<u8>, DecodingError> {
+        let mut output = vec![];
+        GifDecoder::decode(data, &mut output, code_size)?;
+        Ok(output)
+    }
+}
+
+pub struct TiffDecoder;
+
+impl TiffDecoder {
+    pub fn decode<R: Read, W: Write>(data: R, into: W) -> Result<(), DecodingError> {
+        VariableDecoder::inner_decode(BigEndianReader::new(data), into, 8, CodeSizeIncrease::Tiff)
+    }
+
+    pub fn decode_to_vec<R: Read>(data: R) -> Result<Vec<u8>, DecodingError> {
+        let mut output = vec![];
+        TiffDecoder::decode(data, &mut output)?;
+        Ok(output)
     }
 }
 
@@ -378,7 +431,14 @@ mod tests {
         ];
 
         let mut decoded = vec![];
-        Decoder::decode(&data[..], &mut decoded, 2, Endianness::LittleEndian).unwrap();
+        VariableDecoder::decode(
+            &data[..],
+            &mut decoded,
+            2,
+            Endianness::LittleEndian,
+            CodeSizeIncrease::Default,
+        )
+        .unwrap();
 
         assert_eq!(
             decoded,
@@ -397,8 +457,22 @@ mod tests {
 
         let mut decoded1 = vec![];
         let mut decoded2 = vec![];
-        Decoder::decode(&data[..], &mut decoded1, 2, Endianness::LittleEndian).unwrap();
-        Decoder::decode(&data[..], &mut decoded2, 2, Endianness::LittleEndian).unwrap();
+        VariableDecoder::decode(
+            &data[..],
+            &mut decoded1,
+            2,
+            Endianness::LittleEndian,
+            CodeSizeIncrease::Default,
+        )
+        .unwrap();
+        VariableDecoder::decode(
+            &data[..],
+            &mut decoded2,
+            2,
+            Endianness::LittleEndian,
+            CodeSizeIncrease::Default,
+        )
+        .unwrap();
 
         assert_eq!(decoded1, decoded2);
     }
@@ -409,7 +483,14 @@ mod tests {
         let expected = include_bytes!("../../test-assets/lorem_ipsum.txt");
 
         let mut decoded = vec![];
-        Decoder::decode(&data[..], &mut decoded, 7, Endianness::LittleEndian).unwrap();
+        VariableDecoder::decode(
+            &data[..],
+            &mut decoded,
+            7,
+            Endianness::LittleEndian,
+            CodeSizeIncrease::Default,
+        )
+        .unwrap();
 
         assert_eq!(decoded, expected);
     }
@@ -419,9 +500,15 @@ mod tests {
         let data = [0];
         let into = vec![];
 
-        let result = Decoder::decode(&data[..], into, 10, Endianness::LittleEndian)
-            .err()
-            .unwrap();
+        let result = VariableDecoder::decode(
+            &data[..],
+            into,
+            10,
+            Endianness::LittleEndian,
+            CodeSizeIncrease::Default,
+        )
+        .err()
+        .unwrap();
         let expected = DecodingError::CodeSize(10);
 
         assert_eq!(expected.to_string(), result.to_string());

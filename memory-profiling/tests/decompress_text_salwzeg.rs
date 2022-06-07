@@ -1,3 +1,5 @@
+use salzweg::CodeSizeIncrease;
+
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
@@ -12,11 +14,12 @@ fn decompress_text_salzweg() {
 
     let start_stats = dhat::HeapStats::get();
 
-    salzweg::decoder::Decoder::decode(
+    salzweg::decoder::VariableDecoder::decode(
         LOREM_IPSUM_LONG_ENCODED,
         &mut decompressed,
         7,
         salzweg::Endianness::LittleEndian,
+        CodeSizeIncrease::Default,
     )
     .unwrap();
 

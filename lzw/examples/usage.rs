@@ -1,3 +1,5 @@
+use salzweg::{decoder::TiffDecoder, encoder::TiffEncoder, CodeSizeIncrease};
+
 const LOREM_IPSUM: &str = include_str!("../../test-assets/lorem_ipsum.txt");
 const LOREM_IPSUM_LONG: &str = include_str!("../../test-assets/lorem_ipsum_long.txt");
 const LOREM_IPSUM_ENCODED: &[u8] = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
@@ -13,15 +15,17 @@ fn main() {
     check_string_decoding(LOREM_IPSUM_LONG_ENCODED);
     check_fixed_string_encoding(LOREM_IPSUM_ENCODED);
     decode_colors();
+    check_tiff_encoding(LOREM_IPSUM);
 }
 
 fn check_string_compression(string: &str) {
     let mut compressed = vec![];
-    salzweg::encoder::Encoder::encode(
+    salzweg::encoder::VariableEncoder::encode(
         string.as_bytes(),
         &mut compressed,
         7,
         salzweg::Endianness::LittleEndian,
+        CodeSizeIncrease::Default,
     )
     .unwrap();
 
@@ -35,11 +39,12 @@ fn check_string_compression(string: &str) {
 
 fn check_string_decoding(data: &[u8]) {
     let mut my_decompressed = vec![];
-    salzweg::decoder::Decoder::decode(
+    salzweg::decoder::VariableDecoder::decode(
         data,
         &mut my_decompressed,
         7,
         salzweg::Endianness::LittleEndian,
+        CodeSizeIncrease::Default,
     )
     .unwrap();
 
@@ -68,9 +73,13 @@ fn decode_colors() {
         0x8C, 0x2D, 0x99, 0x87, 0x2A, 0x1C, 0xDC, 0x33, 0xA0, 0x2, 0x55, 0x0,
     ];
 
-    let decoded =
-        salzweg::decoder::Decoder::decode_to_vec(&data[..], 2, salzweg::Endianness::LittleEndian)
-            .unwrap();
+    let decoded = salzweg::decoder::VariableDecoder::decode_to_vec(
+        &data[..],
+        2,
+        salzweg::Endianness::LittleEndian,
+        CodeSizeIncrease::Default,
+    )
+    .unwrap();
 
     assert_eq!(
         decoded,
@@ -79,4 +88,13 @@ fn decode_colors() {
             2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
         ]
     );
+}
+
+fn check_tiff_encoding(string: &str) {
+    let data = string.as_bytes();
+    let compressed = TiffEncoder::encode_to_vec(data).unwrap();
+
+    let decompressed = TiffDecoder::decode_to_vec(&compressed[..]).unwrap();
+
+    assert_eq!(data, decompressed);
 }
