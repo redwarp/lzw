@@ -1,8 +1,8 @@
 //! LZW encoder and decoder.
 //!
 //! This crate provides a Encoder and Decoder to compress and decompress LZW data.
-//! This particular implementation provides the gif variation of LZW, using variable code size,
-//!  as well as the TIFF variation, or the original 12 bit fixed sized LZW variation.
+//! This particular implementation provides the GIF and TIFF variation, as well
+//! as the original fixed 12 bit LZW variation.
 //!
 //! It's fast, and use limited memory to do so: the decoder only uses the stack.
 //!
