@@ -22,11 +22,11 @@
 //! let mut compressed = vec![];
 //! let mut decompressed = vec![];
 //!
-//! GifStyleEncoder::encode(&data[..], &mut compressed, 2).unwrap();
+//! GifStyleEncoder::encode(&data[..], &mut compressed, 2).expect("Compression failed");
 //!
 //! assert_eq!(compressed, [0x04, 0x32, 0x05]);
 //!
-//! GifStyleDecoder::decode(&compressed[..], &mut decompressed, 2).unwrap();
+//! GifStyleDecoder::decode(&compressed[..], &mut decompressed, 2).expect("Decompression failed");
 //!
 //! assert_eq!(decompressed, data);
 //! ```
@@ -38,14 +38,14 @@
 //!
 //! let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
 //!     .parent()
-//!     .unwrap()
+//!     .expect("Couldn't find parent folder")
 //!     .join("test-assets/lorem_ipsum.txt");
 //!
 //! let output_file = std::io::sink(); // Let's pretend this is a file.
 //!
-//! let data = BufReader::new(File::open(path).unwrap());
+//! let data = BufReader::new(File::open(path).expect("Couldn't open the file"));
 //!
-//! TiffStyleEncoder::encode(data, output_file).unwrap();
+//! TiffStyleEncoder::encode(data, output_file).expect("Compression failed");
 //! ```
 
 pub mod decoder;
