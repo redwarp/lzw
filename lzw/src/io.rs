@@ -39,7 +39,7 @@ impl<R> BitReader for LittleEndianReader<R>
 where
     R: Read,
 {
-    #[inline]
+    #[inline(always)]
     fn read_one(&mut self, amount: u8) -> Result<u16, std::io::Error> {
         while self.cursor < amount {
             self.read.read_exact(&mut self.read_buffer[..])?;
@@ -54,6 +54,7 @@ where
         Ok(data)
     }
 
+    #[inline(always)]
     fn read(&mut self, amount: u8, buf: &mut [u16]) -> Result<usize, std::io::Error> {
         let mut done = 0;
         while done < buf.len() {
@@ -108,7 +109,7 @@ impl<R> BitReader for BigEndianReader<R>
 where
     R: Read,
 {
-    #[inline]
+    #[inline(always)]
     fn read_one(&mut self, amount: u8) -> Result<u16, std::io::Error> {
         while self.cursor < amount {
             self.read.read_exact(&mut self.read_buffer[..])?;
@@ -126,6 +127,7 @@ where
         Ok(data)
     }
 
+    #[inline(always)]
     fn read(&mut self, amount: u8, buf: &mut [u16]) -> Result<usize, std::io::Error> {
         let mut done = 0;
         while done < buf.len() {

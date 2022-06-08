@@ -51,6 +51,10 @@ impl From<std::io::Error> for EncodingError {
     }
 }
 
+/// Checking the tree after encoding, I found out that most items in the tree had zero children,
+/// or one children. Then it reduces logarithmically. Using an enum to represent these three cases
+/// seem to give the best return, preventing unecessary allocation of vecs.
+/// We will only allocate vec to store information of multiple leaves if an item gets more than one child.
 #[derive(Debug, Clone)]
 enum Node {
     NoChild,
@@ -63,19 +67,23 @@ enum Node {
 pub(crate) struct Tree {
     nodes: Vec<Node>,
     code_size: u8,
+    code_count: usize,
     with_clear_code: bool,
 }
 
 impl Tree {
     fn new(code_size: u8, with_clear_code: bool) -> Self {
         let nodes = Vec::with_capacity(1 << (code_size + 1));
+        let code_count = 1 << code_size;
         Self {
             nodes,
             code_size,
+            code_count,
             with_clear_code,
         }
     }
 
+    #[inline(always)]
     fn reset(&mut self) {
         self.nodes.clear();
         if self.with_clear_code {
@@ -85,20 +93,21 @@ impl Tree {
         }
     }
 
+    #[inline(always)]
     fn find_word(&self, prefix_index: u16, next_char: u8) -> Option<u16> {
         let prefix = &self.nodes[prefix_index as usize];
         match prefix {
             Node::NoChild => None,
-            Node::OneChild(child_char, child_index) => {
-                if *child_char == next_char {
-                    Some(*child_index)
+            &Node::OneChild(child_char, child_index) => {
+                if child_char == next_char {
+                    Some(child_index)
                 } else {
                     None
                 }
             }
             Node::ManyChildren(child_indices) => {
                 let child_index = child_indices[next_char as usize];
-                if child_index != u16::MAX {
+                if child_index > 0 {
                     Some(child_index)
                 } else {
                     None
@@ -107,6 +116,7 @@ impl Tree {
         }
     }
 
+    #[inline(always)]
     fn add(&mut self, prefix_index: u16, k: u8) -> u16 {
         let new_index = self.nodes.len() as u16;
         let prefix_index = prefix_index as usize;
@@ -118,7 +128,7 @@ impl Tree {
                 self.nodes[prefix_index] = Node::OneChild(k, new_index);
             }
             Node::OneChild(other_k, other_index) => {
-                let mut children = vec![u16::MAX; 1 << self.code_size];
+                let mut children = vec![0; self.code_count];
                 children[*other_k as usize] = *other_index;
                 children[k as usize] = new_index;
                 self.nodes[prefix_index] = Node::ManyChildren(children);
@@ -131,6 +141,7 @@ impl Tree {
         new_index
     }
 
+    #[inline(always)]
     fn len(&self) -> usize {
         self.nodes.len()
     }
