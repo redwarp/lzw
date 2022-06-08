@@ -130,7 +130,9 @@ where
         let mut done = 0;
         while done < buf.len() {
             while self.cursor < amount {
-                self.read.read_exact(&mut self.read_buffer[..])?;
+                if self.read.read(&mut self.read_buffer[..])? == 0 {
+                    return Ok(done);
+                }
                 let shift = 24 - self.cursor;
                 self.byte_buffer |= (self.read_buffer[0] as u32) << shift;
                 self.cursor += 8;
@@ -527,7 +529,7 @@ mod tests {
     }
 
     #[test]
-    fn read_full() -> Result<(), std::io::Error> {
+    fn read_full_little_endian() -> Result<(), std::io::Error> {
         let mut output = vec![];
         let mut writer = LittleEndianWriter::new(&mut output);
         writer.write(0, 12)?;
@@ -539,6 +541,26 @@ mod tests {
         drop(writer);
 
         let mut reader = LittleEndianReader::new(&output[..]);
+        let result: Result<Vec<u16>, _> = reader.iter(12).collect();
+
+        assert_eq!(result?, [0, 1, 0, 2]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn read_full_big_endian() -> Result<(), std::io::Error> {
+        let mut output = vec![];
+        let mut writer = BigEndianWriter::new(&mut output);
+        writer.write(0, 12)?;
+        writer.write(1, 12)?;
+        writer.write(0, 12)?;
+        writer.write(2, 12)?;
+        writer.fill()?;
+        writer.flush()?;
+        drop(writer);
+
+        let mut reader = BigEndianReader::new(&output[..]);
         let result: Result<Vec<u16>, _> = reader.iter(12).collect();
 
         assert_eq!(result?, [0, 1, 0, 2]);
