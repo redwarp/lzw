@@ -22,3 +22,7 @@ anyhow = "1.0"
 [[bench]]
 name = "compare_crates"
 harness = false
+
+[[bench]]
+name = "throughput"
+harness = false

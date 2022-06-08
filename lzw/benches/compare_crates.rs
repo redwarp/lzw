@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
 use salzweg::CodeSizeStrategy;
 use std::{fs::File, io::Write, path::Path};
@@ -10,24 +10,26 @@ const LOREM_IPSUM_ENCODED_BE: &[u8] =
 
 pub fn encoding_text(c: &mut Criterion) {
     let mut group = c.benchmark_group("encoding text");
+    let data = LOREM_IPSUM;
+    group.throughput(Throughput::Bytes(data.len() as u64));
     group.bench_function("lzw", |b| {
         b.iter(|| {
             let mut encoder =
                 lzw::Encoder::new(lzw::LsbWriter::new(std::io::sink()), black_box(7)).unwrap();
-            encoder.encode_bytes(LOREM_IPSUM).unwrap();
+            encoder.encode_bytes(data).unwrap();
         })
     });
     group.bench_function("weezl", |b| {
         b.iter(|| {
             let mut encoder = weezl::encode::Encoder::new(weezl::BitOrder::Lsb, black_box(7));
             let mut stream_encoder = encoder.into_stream(std::io::sink());
-            stream_encoder.encode(LOREM_IPSUM).status.unwrap();
+            stream_encoder.encode(data).status.unwrap();
         })
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
             salzweg::encoder::VariableEncoder::encode(
-                LOREM_IPSUM,
+                data,
                 std::io::sink(),
                 black_box(7),
                 salzweg::Endianness::LittleEndian,
@@ -42,6 +44,7 @@ pub fn encoding_random_data(c: &mut Criterion) {
     let data = prepare_random_data();
 
     let mut group = c.benchmark_group("encoding random data");
+    group.throughput(Throughput::Bytes(data.len() as u64));
     group.bench_function("lzw", |b| {
         b.iter(|| {
             let mut encoder =
@@ -74,6 +77,7 @@ pub fn encoding_image_data(c: &mut Criterion) {
     let data = prepare_image_data();
 
     let mut group = c.benchmark_group("encoding image data");
+    group.throughput(Throughput::Bytes(data.len() as u64));
     group.bench_function("lzw", |b| {
         b.iter(|| {
             let mut encoder =
@@ -131,20 +135,18 @@ pub fn decoding_image_to_vec(c: &mut Criterion) {
 
 pub fn decoding_text_to_vec_be(c: &mut Criterion) {
     let mut group = c.benchmark_group("decoding text to vec be");
+    let data = LOREM_IPSUM_ENCODED_BE;
+    group.throughput(Throughput::Bytes(data.len() as u64));
     group.bench_function("weezl", |b| {
         b.iter(|| {
             let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Msb, black_box(7));
-            decoder
-                .into_stream(vec![])
-                .decode(LOREM_IPSUM_ENCODED_BE)
-                .status
-                .unwrap();
+            decoder.into_stream(vec![]).decode(data).status.unwrap();
         })
     });
     group.bench_function("salzweg", |b| {
         b.iter(|| {
             salzweg::decoder::VariableDecoder::decode(
-                LOREM_IPSUM_ENCODED_BE,
+                data,
                 vec![],
                 black_box(7),
                 salzweg::Endianness::BigEndian,
@@ -161,6 +163,7 @@ where
     W: Write,
 {
     let mut group = c.benchmark_group(name);
+    group.throughput(Throughput::Bytes(data.len() as u64));
     group.bench_function("weezl", |b| {
         b.iter(|| {
             let mut decoder =
