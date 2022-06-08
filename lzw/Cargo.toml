@@ -15,14 +15,9 @@ categories = ["compression"]
 criterion = { version = "0.3", features = ["html_reports"] }
 lzw = "0.10"
 weezl = "0.1"
-rand = "0.8"
 png = "0.17"
 anyhow = "1.0"
 
 [[bench]]
 name = "compare_crates"
-harness = false
-
-[[bench]]
-name = "throughput"
 harness = false

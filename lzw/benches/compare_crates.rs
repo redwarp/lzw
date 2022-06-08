@@ -1,212 +1,274 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-use rand::{prelude::StdRng, RngCore, SeedableRng};
-use salzweg::CodeSizeStrategy;
-use std::{fs::File, io::Write, path::Path};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::{fs::File, path::Path};
 
 const LOREM_IPSUM: &[u8] = include_str!("../../test-assets/lorem_ipsum_long.txt").as_bytes();
-const LOREM_IPSUM_ENCODED: &[u8] = include_bytes!("../../test-assets/lorem_ipsum_long_encoded.bin");
-const LOREM_IPSUM_ENCODED_BE: &[u8] =
-    include_bytes!("../../test-assets/lorem_ipsum_long_encoded_be.bin");
 
-pub fn encoding_text(c: &mut Criterion) {
-    let mut group = c.benchmark_group("encoding text");
+fn bench_text(c: &mut Criterion) {
     let data = LOREM_IPSUM;
-    group.throughput(Throughput::Bytes(data.len() as u64));
-    group.bench_function("lzw", |b| {
-        b.iter(|| {
-            let mut encoder =
-                lzw::Encoder::new(lzw::LsbWriter::new(std::io::sink()), black_box(7)).unwrap();
-            encoder.encode_bytes(data).unwrap();
-        })
-    });
-    group.bench_function("weezl", |b| {
-        b.iter(|| {
-            let mut encoder = weezl::encode::Encoder::new(weezl::BitOrder::Lsb, black_box(7));
-            let mut stream_encoder = encoder.into_stream(std::io::sink());
-            stream_encoder.encode(data).status.unwrap();
-        })
-    });
-    group.bench_function("salzweg", |b| {
-        b.iter(|| {
-            salzweg::encoder::VariableEncoder::encode(
-                data,
-                std::io::sink(),
-                black_box(7),
-                salzweg::Endianness::LittleEndian,
-                CodeSizeStrategy::Default,
-            )
-            .unwrap();
-        })
-    });
+
+    bench(c, "ASCII data", data, 7);
 }
 
-pub fn encoding_random_data(c: &mut Criterion) {
-    let data = prepare_random_data();
-
-    let mut group = c.benchmark_group("encoding random data");
-    group.throughput(Throughput::Bytes(data.len() as u64));
-    group.bench_function("lzw", |b| {
-        b.iter(|| {
-            let mut encoder =
-                lzw::Encoder::new(lzw::LsbWriter::new(std::io::sink()), black_box(8)).unwrap();
-            encoder.encode_bytes(&data).unwrap();
-        })
-    });
-    group.bench_function("weezl", |b| {
-        b.iter(|| {
-            let mut encoder = weezl::encode::Encoder::new(weezl::BitOrder::Lsb, black_box(8));
-            let mut stream_encoder = encoder.into_stream(std::io::sink());
-            stream_encoder.encode(&data[..]).status.unwrap();
-        })
-    });
-    group.bench_function("salzweg", |b| {
-        b.iter(|| {
-            salzweg::encoder::VariableEncoder::encode(
-                &data[..],
-                std::io::sink(),
-                black_box(8),
-                salzweg::Endianness::LittleEndian,
-                CodeSizeStrategy::Default,
-            )
-            .unwrap();
-        })
-    });
-}
-
-pub fn encoding_image_data(c: &mut Criterion) {
+fn bench_image(c: &mut Criterion) {
     let data = prepare_image_data();
 
-    let mut group = c.benchmark_group("encoding image data");
+    bench(c, "Image data", data.as_slice(), 7);
+}
+
+fn bench(c: &mut Criterion, name: &str, data: &[u8], code_size: u8) {
+    bench_gif_encoding(c, name, data, code_size);
+    bench_gif_decoding(c, name, data, code_size);
+    bench_tiff_encoding(c, name, data);
+    bench_tiff_decoding(c, name, data);
+    bench_fixed_size(c, name, data);
+}
+
+fn bench_gif_encoding(c: &mut Criterion, name: &str, data: &[u8], code_size: u8) {
+    let mut group = c.benchmark_group("Encode GIF style");
     group.throughput(Throughput::Bytes(data.len() as u64));
-    group.bench_function("lzw", |b| {
+
+    group.bench_with_input(BenchmarkId::new(name, "Lzw"), data, |b, i| {
+        let mut output = {
+            let mut output = vec![];
+            let mut encoder =
+                lzw::Encoder::new(lzw::LsbWriter::new(&mut output), code_size).unwrap();
+            encoder.encode_bytes(i).unwrap();
+            drop(encoder);
+            output
+        };
+
+        b.iter(|| {
+            let mut encoder = lzw::Encoder::new(
+                lzw::LsbWriter::new(output.as_mut_slice()),
+                black_box(code_size),
+            )
+            .unwrap();
+            encoder.encode_bytes(i).expect("Compression failed")
+        })
+    });
+
+    group.bench_with_input(BenchmarkId::new(name, "Weezl"), data, |b, i| {
+        let mut output = {
+            weezl::encode::Encoder::new(weezl::BitOrder::Lsb, code_size)
+                .encode(data)
+                .expect("Compression failed")
+        };
+
         b.iter(|| {
             let mut encoder =
-                lzw::Encoder::new(lzw::LsbWriter::new(std::io::sink()), black_box(7)).unwrap();
-            encoder.encode_bytes(&data).unwrap();
+                weezl::encode::Encoder::new(weezl::BitOrder::Lsb, black_box(code_size));
+            let mut stream_encoder = encoder.into_stream(output.as_mut_slice());
+            stream_encoder.encode(i).status.expect("Compression failed")
         })
     });
-    group.bench_function("weezl", |b| {
+
+    group.bench_with_input(BenchmarkId::new(name, "Salzweg"), data, |b, i| {
+        let mut output = salzweg::encoder::GifStyleEncoder::encode_to_vec(data, code_size)
+            .expect("Compression failed");
+
         b.iter(|| {
-            let mut encoder = weezl::encode::Encoder::new(weezl::BitOrder::Lsb, black_box(7));
-            let mut stream_encoder = encoder.into_stream(std::io::sink());
-            stream_encoder.encode(&data[..]).status.unwrap();
-        })
-    });
-    group.bench_function("salzweg", |b| {
-        b.iter(|| {
-            salzweg::encoder::VariableEncoder::encode(
-                &data[..],
-                std::io::sink(),
-                black_box(7),
-                salzweg::Endianness::LittleEndian,
-                CodeSizeStrategy::Default,
-            )
-            .unwrap();
-        })
-    });
-}
-
-pub fn decoding_text(c: &mut Criterion) {
-    decoding_bench(c, "decoding text", LOREM_IPSUM_ENCODED, 7, || {
-        std::io::sink()
-    });
-}
-
-pub fn decoding_random_data(c: &mut Criterion) {
-    let encoded_data = prepare_encoded_random_data();
-
-    decoding_bench(c, "decoding random data", &encoded_data, 8, || {
-        std::io::sink()
-    });
-}
-pub fn decoding_image_data(c: &mut Criterion) {
-    let encoded_data = prepare_encoded_image_data();
-
-    decoding_bench(c, "decoding image data", &encoded_data, 7, || {
-        std::io::sink()
-    });
-}
-
-pub fn decoding_image_to_vec(c: &mut Criterion) {
-    let encoded_data = prepare_encoded_image_data();
-
-    decoding_bench(c, "decoding image to vec", &encoded_data, 7, || vec![]);
-}
-
-pub fn decoding_text_to_vec_be(c: &mut Criterion) {
-    let mut group = c.benchmark_group("decoding text to vec be");
-    let data = LOREM_IPSUM_ENCODED_BE;
-    group.throughput(Throughput::Bytes(data.len() as u64));
-    group.bench_function("weezl", |b| {
-        b.iter(|| {
-            let mut decoder = weezl::decode::Decoder::new(weezl::BitOrder::Msb, black_box(7));
-            decoder.into_stream(vec![]).decode(data).status.unwrap();
-        })
-    });
-    group.bench_function("salzweg", |b| {
-        b.iter(|| {
-            salzweg::decoder::VariableDecoder::decode(
-                data,
-                vec![],
-                black_box(7),
-                salzweg::Endianness::BigEndian,
-                CodeSizeStrategy::Default,
-            )
-            .unwrap();
-        })
-    });
-}
-
-fn decoding_bench<F, W>(c: &mut Criterion, name: &str, data: &[u8], code_size: u8, into: F)
-where
-    F: 'static + FnOnce() -> W + Copy,
-    W: Write,
-{
-    let mut group = c.benchmark_group(name);
-    group.throughput(Throughput::Bytes(data.len() as u64));
-    group.bench_function("weezl", |b| {
-        b.iter(|| {
-            let mut decoder =
-                weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(code_size));
-            decoder.into_stream(into()).decode(data).status.unwrap();
-        })
-    });
-    group.bench_function("salzweg", |b| {
-        b.iter(|| {
-            salzweg::decoder::VariableDecoder::decode(
-                data,
-                into(),
+            salzweg::encoder::GifStyleEncoder::encode(
+                i,
+                output.as_mut_slice(),
                 black_box(code_size),
-                salzweg::Endianness::LittleEndian,
-                CodeSizeStrategy::Default,
             )
-            .unwrap();
+            .expect("Compression failed");
         })
     });
+
+    group.finish();
 }
 
-fn prepare_random_data() -> Vec<u8> {
-    let mut rand = StdRng::seed_from_u64(42);
-    let mut data: Vec<u8> = vec![0; 1 << 20];
-    rand.fill_bytes(&mut data[..]);
+fn bench_gif_decoding(c: &mut Criterion, name: &str, data: &[u8], code_size: u8) {
+    let compressed = salzweg::encoder::GifStyleEncoder::encode_to_vec(data, code_size)
+        .expect("Compression failed");
 
-    data
+    let mut group = c.benchmark_group("Decode GIF style");
+    group.throughput(Throughput::Bytes(data.len() as u64));
+
+    group.bench_with_input(
+        BenchmarkId::new(name, "Weezl"),
+        compressed.as_slice(),
+        |b, i| {
+            let mut output = vec![0; data.len()];
+
+            b.iter(|| {
+                let mut decoder =
+                    weezl::decode::Decoder::new(weezl::BitOrder::Lsb, black_box(code_size));
+                decoder
+                    .into_stream(output.as_mut_slice())
+                    .decode(i)
+                    .status
+                    .expect("Compression failed");
+            })
+        },
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new(name, "Salzweg"),
+        compressed.as_slice(),
+        |b, i| {
+            let mut output = vec![0; data.len()];
+
+            b.iter(|| {
+                salzweg::decoder::GifStyleDecoder::decode(
+                    i,
+                    output.as_mut_slice(),
+                    black_box(code_size),
+                )
+                .expect("Compression failed");
+            })
+        },
+    );
+
+    group.finish();
 }
 
-fn prepare_encoded_random_data() -> Vec<u8> {
-    let data = prepare_random_data();
+fn bench_tiff_encoding(c: &mut Criterion, name: &str, data: &[u8]) {
+    let mut group = c.benchmark_group("Encode TIFF style");
+    group.throughput(Throughput::Bytes(data.len() as u64));
 
-    let mut output = vec![];
+    group.bench_with_input(BenchmarkId::new(name, "Weezl"), data, |b, i| {
+        let mut output = {
+            weezl::encode::Encoder::with_tiff_size_switch(weezl::BitOrder::Msb, 8)
+                .encode(data)
+                .expect("Compression failed")
+        };
 
-    salzweg::encoder::VariableEncoder::encode(
-        &data[..],
-        &mut output,
-        8,
-        salzweg::Endianness::LittleEndian,
-        CodeSizeStrategy::Default,
-    )
-    .unwrap();
-    output
+        b.iter(|| {
+            let mut encoder = weezl::encode::Encoder::new(weezl::BitOrder::Msb, black_box(8));
+            let mut stream_encoder = encoder.into_stream(output.as_mut_slice());
+            stream_encoder.encode(i).status.expect("Compression failed")
+        })
+    });
+
+    group.bench_with_input(BenchmarkId::new(name, "Salzweg"), data, |b, i| {
+        let mut output =
+            salzweg::encoder::TiffStyleEncoder::encode_to_vec(data).expect("Compression failed");
+
+        b.iter(|| {
+            salzweg::encoder::TiffStyleEncoder::encode(i, output.as_mut_slice())
+                .expect("Compression failed");
+        })
+    });
+
+    group.finish();
+}
+
+fn bench_tiff_decoding(c: &mut Criterion, name: &str, data: &[u8]) {
+    let compressed =
+        salzweg::encoder::TiffStyleEncoder::encode_to_vec(data).expect("Compression failed");
+
+    let mut group = c.benchmark_group("Decode TIFF style");
+    group.throughput(Throughput::Bytes(data.len() as u64));
+
+    group.bench_with_input(
+        BenchmarkId::new(name, "Weezl"),
+        compressed.as_slice(),
+        |b, i| {
+            let mut output = vec![0; data.len()];
+
+            b.iter(|| {
+                let mut decoder = weezl::decode::Decoder::with_tiff_size_switch(
+                    weezl::BitOrder::Msb,
+                    black_box(8),
+                );
+                decoder
+                    .into_stream(output.as_mut_slice())
+                    .decode(i)
+                    .status
+                    .expect("Compression failed");
+            })
+        },
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new(name, "Salzweg"),
+        compressed.as_slice(),
+        |b, i| {
+            let mut output = vec![0; data.len()];
+
+            b.iter(|| {
+                salzweg::decoder::TiffStyleDecoder::decode(i, output.as_mut_slice())
+                    .expect("Compression failed");
+            })
+        },
+    );
+
+    group.finish();
+}
+
+fn bench_fixed_size(c: &mut Criterion, name: &str, data: &[u8]) {
+    {
+        let mut output =
+            salzweg::encoder::FixedEncoder::encode_to_vec(data, salzweg::Endianness::LittleEndian)
+                .expect("Compression failed");
+        let mut group = c.benchmark_group("Encode fixed");
+        group.throughput(Throughput::Bytes(data.len() as u64));
+
+        group.bench_with_input(BenchmarkId::new(name, "Little Endian"), data, |b, i| {
+            b.iter(|| {
+                salzweg::encoder::FixedEncoder::encode(
+                    i,
+                    output.as_mut_slice(),
+                    salzweg::Endianness::LittleEndian,
+                )
+                .expect("Compression failed");
+            })
+        });
+        group.bench_with_input(BenchmarkId::new(name, "Big Endian"), data, |b, i| {
+            b.iter(|| {
+                salzweg::encoder::FixedEncoder::encode(
+                    i,
+                    output.as_mut_slice(),
+                    salzweg::Endianness::BigEndian,
+                )
+                .expect("Compression failed");
+            });
+        });
+    }
+
+    {
+        let mut output = vec![0; data.len()];
+        let mut group = c.benchmark_group("Decode fixed");
+
+        let compressed =
+            salzweg::encoder::FixedEncoder::encode_to_vec(data, salzweg::Endianness::LittleEndian)
+                .expect("Compression failed");
+        group.throughput(Throughput::Bytes(data.len() as u64));
+        group.bench_with_input(
+            BenchmarkId::new(name, "Little Endian"),
+            compressed.as_slice(),
+            |b, i| {
+                b.iter(|| {
+                    salzweg::decoder::FixedDecoder::decode(
+                        i,
+                        output.as_mut_slice(),
+                        salzweg::Endianness::LittleEndian,
+                    )
+                    .expect("Compression failed");
+                })
+            },
+        );
+
+        let compressed =
+            salzweg::encoder::FixedEncoder::encode_to_vec(data, salzweg::Endianness::BigEndian)
+                .expect("Compression failed");
+        group.bench_with_input(
+            BenchmarkId::new(name, "Big Endian"),
+            compressed.as_slice(),
+            |b, i| {
+                b.iter(|| {
+                    salzweg::decoder::FixedDecoder::decode(
+                        i,
+                        output.as_mut_slice(),
+                        salzweg::Endianness::BigEndian,
+                    )
+                    .expect("Compression failed");
+                });
+            },
+        );
+    }
 }
 
 /// This actually prepare a vec of values in 0..128. It works because the image, a png with 128 colors,
@@ -224,32 +286,5 @@ fn prepare_image_data() -> Vec<u8> {
     buf[..info.buffer_size()].to_vec()
 }
 
-fn prepare_encoded_image_data() -> Vec<u8> {
-    let data = prepare_image_data();
-
-    let mut output = vec![];
-
-    salzweg::encoder::VariableEncoder::encode(
-        &data[..],
-        &mut output,
-        7,
-        salzweg::Endianness::LittleEndian,
-        CodeSizeStrategy::Default,
-    )
-    .unwrap();
-
-    output
-}
-
-criterion_group!(
-    benches,
-    encoding_text,
-    encoding_random_data,
-    encoding_image_data,
-    decoding_text,
-    decoding_random_data,
-    decoding_image_data,
-    decoding_image_to_vec,
-    decoding_text_to_vec_be
-);
+criterion_group!(benches, bench_text, bench_image);
 criterion_main!(benches);
