@@ -182,22 +182,23 @@ impl VariableDecoder {
         }
         let mut into = into;
 
-        const TABLE_MAX_SIZE: usize = 4096;
+        const MAX_TABLE_SIZE: usize = 4096;
         // The stack should be as big as the longest word that the dictionnary can have.
         // The longuest word would be reached if by bad luck, each entry of the dictionnary is made
         // of the previous entry, increasing in size each time. This size would be the biggest
         // for the minimum code size of 2, as there would be more "free entry" in the table
         // not corresponding to a single digit.
         // In effect, stack max size = 4096 - 2^2 - 2 entries for clear and EOF + 1.
-        const STACK_MAX_SIZE: usize = 4091;
+        const MAX_STACK_SIZE: usize = 4091;
+        const MAX_READ_SIZE: u8 = 12;
         // In effect, our prefix and suffix is our decoding table, as each word can be expressed
         // by a previous code (prefix), and the extra letter (suffix). We store the word length
         // as well, it's useful to recreate the word stack.
-        let mut prefix: [u16; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
-        let mut suffix: [u8; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
-        let mut length: [usize; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
+        let mut prefix: [u16; MAX_TABLE_SIZE] = [0; MAX_TABLE_SIZE];
+        let mut suffix: [u8; MAX_TABLE_SIZE] = [0; MAX_TABLE_SIZE];
+        let mut length: [usize; MAX_TABLE_SIZE] = [0; MAX_TABLE_SIZE];
         // We will use this stack to decode each string.
-        let mut decoding_stack: [u8; STACK_MAX_SIZE] = [0; STACK_MAX_SIZE];
+        let mut decoding_stack: [u8; MAX_STACK_SIZE] = [0; MAX_STACK_SIZE];
         // We prefill our dictionnary with all the known values;
         for code in 0..1 << code_size {
             suffix[code as usize] = code as u8;
@@ -264,12 +265,12 @@ impl VariableDecoder {
 
             into.write_all(&decoding_stack[0..word_length])?;
 
-            if next_index < TABLE_MAX_SIZE as u16 {
+            if next_index < MAX_TABLE_SIZE as u16 {
                 prefix[next_index as usize] = previous_code.unwrap();
                 suffix[next_index as usize] = decoding_stack[0];
                 length[next_index as usize] = length[previous_code.unwrap() as usize] + 1;
                 next_index += 1;
-                if next_index == size_increase_mask && read_size < 12 {
+                if next_index == size_increase_mask && read_size < MAX_READ_SIZE {
                     read_size += 1;
                     size_increase_mask = (1 << read_size) - code_size_increase.increment();
                 }
@@ -413,7 +414,13 @@ impl TiffStyleDecoder {
     /// }
     /// ```
     pub fn decode<R: Read, W: Write>(data: R, into: W) -> Result<(), DecodingError> {
-        VariableDecoder::inner_decode(BigEndianReader::new(data), into, 8, CodeSizeStrategy::Tiff)
+        const TIFF_CODE_SIZE: u8 = 8;
+        VariableDecoder::inner_decode(
+            BigEndianReader::new(data),
+            into,
+            TIFF_CODE_SIZE,
+            CodeSizeStrategy::Tiff,
+        )
     }
 
     /// Decode data with LZW, using TIFF style variable encoding.
@@ -542,24 +549,24 @@ impl FixedDecoder {
     fn inner_decode<B: BitReader, W: Write>(bit_reader: B, into: W) -> Result<(), DecodingError> {
         let mut into = into;
 
-        const TABLE_MAX_SIZE: usize = 4096;
+        const MAX_TABLE_SIZE: usize = 4096;
         // The stack should be as big as the longest word that the dictionary can have.
         // The longest word would be reached if by bad luck, each entry of the dictionary is
         // made of the previous entry, increasing in size each time.
         // This size would be the biggest for the minimum code size of 2,
         // as there would be more "free entry" in the table not corresponding to a single digit.
         // In effect, stack max size = 4096 - 2^2 - 2 entries for clear and EOF + 1.
-        const STACK_MAX_SIZE: usize = 4091;
+        const MAX_STACK_SIZE: usize = 4091;
         // In effect, our prefix and suffix is our decoding table, as each word can be expressed
         // by a previous code (prefix), and the extra letter (suffix).
         // We store the word length as well, it's useful to recreate the word stack.
         const READ_SIZE: u8 = 12;
 
-        let mut prefix: [u16; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
-        let mut suffix: [u8; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
-        let mut length: [usize; TABLE_MAX_SIZE] = [0; TABLE_MAX_SIZE];
+        let mut prefix: [u16; MAX_TABLE_SIZE] = [0; MAX_TABLE_SIZE];
+        let mut suffix: [u8; MAX_TABLE_SIZE] = [0; MAX_TABLE_SIZE];
+        let mut length: [usize; MAX_TABLE_SIZE] = [0; MAX_TABLE_SIZE];
         // We will use this stack to decode each string.
-        let mut decoding_stack: [u8; STACK_MAX_SIZE] = [0; STACK_MAX_SIZE];
+        let mut decoding_stack: [u8; MAX_STACK_SIZE] = [0; MAX_STACK_SIZE];
         // We prefill our dictionnary with all the known values;
         for code in 0..256 {
             suffix[code as usize] = code as u8;
@@ -612,7 +619,7 @@ impl FixedDecoder {
 
             into.write_all(&decoding_stack[0..word_length])?;
 
-            if next_index < TABLE_MAX_SIZE as u16 {
+            if next_index < MAX_TABLE_SIZE as u16 {
                 prefix[next_index as usize] = previous_code.unwrap();
                 suffix[next_index as usize] = decoding_stack[0];
                 length[next_index as usize] = length[previous_code.unwrap() as usize] + 1;

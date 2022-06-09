@@ -275,6 +275,8 @@ impl VariableEncoder {
         code_size: u8,
         code_size_increase: CodeSizeStrategy,
     ) -> Result<(), EncodingError> {
+        const MAX_WRITE_SIZE: u8 = 12;
+
         if !(2..=8).contains(&code_size) {
             return Err(EncodingError::CodeSize(code_size));
         }
@@ -286,6 +288,7 @@ impl VariableEncoder {
         let mut write_size = code_size + 1;
         let clear_code = 1 << code_size;
         let end_of_information = (1 << code_size) + 1;
+        let mut size_increase_mask = (1 << write_size) - code_size_increase.increment();
 
         let mut tree = Tree::new(code_size, true);
         tree.reset();
@@ -319,19 +322,20 @@ impl VariableEncoder {
                 bit_writer.write(current_prefix, write_size)?;
                 current_prefix = k as u16;
 
-                if index_of_new_entry + code_size_increase.increment() == 1 << write_size {
-                    write_size += 1;
-
-                    if write_size > 12 {
-                        bit_writer.write(clear_code, 12)?;
+                if index_of_new_entry == size_increase_mask {
+                    if write_size < MAX_WRITE_SIZE {
+                        write_size += 1;
+                    } else {
+                        bit_writer.write(clear_code, MAX_WRITE_SIZE)?;
                         write_size = code_size + 1;
                         tree.reset();
                     }
+                    size_increase_mask = (1 << write_size) - code_size_increase.increment();
                 }
             }
         }
 
-        bit_writer.write(current_prefix as u16, write_size)?;
+        bit_writer.write(current_prefix, write_size)?;
         bit_writer.write(end_of_information, write_size)?;
 
         bit_writer.fill()?;
@@ -472,7 +476,13 @@ impl TiffStyleEncoder {
     /// }
     /// ```
     pub fn encode<R: Read, W: Write>(data: R, into: W) -> Result<(), EncodingError> {
-        VariableEncoder::inner_encode(data, BigEndianWriter::new(into), 8, CodeSizeStrategy::Tiff)
+        const TIFF_CODE_SIZE: u8 = 8;
+        VariableEncoder::inner_encode(
+            data,
+            BigEndianWriter::new(into),
+            TIFF_CODE_SIZE,
+            CodeSizeStrategy::Tiff,
+        )
     }
 
     /// Encode lzw, with variable code size, using the TIFF style.
@@ -606,6 +616,7 @@ impl FixedEncoder {
 
     fn inner_encode<R: Read, B: BitWriter>(data: R, bit_writer: B) -> Result<(), EncodingError> {
         const WRITE_SIZE: u8 = 12;
+        const MAX_TABLE_SIZE: usize = 4096;
 
         let mut bit_writer = bit_writer;
 
@@ -630,7 +641,7 @@ impl FixedEncoder {
             if let Some(word) = tree.find_word(current_prefix, k) {
                 current_prefix = word;
             } else {
-                if tree.len() < 4096 {
+                if tree.len() < MAX_TABLE_SIZE {
                     tree.add(current_prefix, k);
                 }
                 bit_writer.write(current_prefix, WRITE_SIZE)?;
@@ -638,7 +649,7 @@ impl FixedEncoder {
             }
         }
 
-        bit_writer.write(current_prefix as u16, WRITE_SIZE)?;
+        bit_writer.write(current_prefix, WRITE_SIZE)?;
         bit_writer.fill()?;
         bit_writer.flush()?;
 
