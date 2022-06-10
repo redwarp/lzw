@@ -73,7 +73,8 @@ pub(crate) struct Tree {
 
 impl Tree {
     fn new(code_size: u8, with_clear_code: bool) -> Self {
-        let nodes = Vec::with_capacity(1 << (code_size + 1));
+        const MAX_ENTRY_COUNT: usize = 4097;
+        let nodes = Vec::with_capacity(MAX_ENTRY_COUNT);
         let code_count = 1 << code_size;
         Self {
             nodes,
@@ -737,8 +738,8 @@ mod tests {
 
     #[test]
     fn encode_lorem_ipsum() {
-        let data = include_bytes!("../../test-assets/lorem_ipsum.txt");
-        let expected = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
+        let data = include_bytes!("../../test-assets/lorem_ipsum_long.txt");
+        let expected = include_bytes!("../../test-assets/lorem_ipsum_long_encoded.bin");
 
         let mut compressed = vec![];
         VariableEncoder::encode(
