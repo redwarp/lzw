@@ -1,7 +1,7 @@
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
-const LOREM_IPSUM_LONG: &str = include_str!("../../test-assets/lorem_ipsum_long.txt");
+const LOREM_IPSUM: &str = include_str!("../../test-assets/lorem_ipsum.txt");
 
 #[test]
 fn compress_text_salzweg() {
@@ -12,7 +12,7 @@ fn compress_text_salzweg() {
     let start_stats = dhat::HeapStats::get();
 
     salzweg::encoder::VariableEncoder::encode(
-        LOREM_IPSUM_LONG.as_bytes(),
+        LOREM_IPSUM.as_bytes(),
         &mut compressed,
         7,
         salzweg::Endianness::LittleEndian,

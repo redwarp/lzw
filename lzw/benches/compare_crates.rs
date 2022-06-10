@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::{fs::File, path::Path};
 
-const LOREM_IPSUM: &[u8] = include_str!("../../test-assets/lorem_ipsum_long.txt").as_bytes();
+const LOREM_IPSUM: &[u8] = include_str!("../../test-assets/lorem_ipsum.txt").as_bytes();
 
 fn bench_text(c: &mut Criterion) {
     let data = LOREM_IPSUM;

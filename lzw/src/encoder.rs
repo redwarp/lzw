@@ -738,8 +738,8 @@ mod tests {
 
     #[test]
     fn encode_lorem_ipsum() {
-        let data = include_bytes!("../../test-assets/lorem_ipsum_long.txt");
-        let expected = include_bytes!("../../test-assets/lorem_ipsum_long_encoded.bin");
+        let data = include_bytes!("../../test-assets/lorem_ipsum.txt");
+        let expected = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
 
         let mut compressed = vec![];
         VariableEncoder::encode(

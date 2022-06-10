@@ -1,8 +1,7 @@
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
-const LOREM_IPSUM_LONG_ENCODED: &[u8] =
-    include_bytes!("../../test-assets/lorem_ipsum_long_encoded.bin");
+const LOREM_IPSUM_ENCODED: &[u8] = include_bytes!("../../test-assets/lorem_ipsum_encoded.bin");
 
 #[test]
 fn decompress_text_salzweg() {
@@ -15,7 +14,7 @@ fn decompress_text_salzweg() {
     let mut my_decoder = weezl::decode::Decoder::new(weezl::BitOrder::Lsb, 7);
     my_decoder
         .into_stream(&mut decompressed)
-        .decode(LOREM_IPSUM_LONG_ENCODED)
+        .decode(LOREM_IPSUM_ENCODED)
         .status
         .unwrap();
 

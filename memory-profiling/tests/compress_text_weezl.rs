@@ -1,7 +1,7 @@
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
-const LOREM_IPSUM_LONG: &str = include_str!("../../test-assets/lorem_ipsum_long.txt");
+const LOREM_IPSUM: &str = include_str!("../../test-assets/lorem_ipsum.txt");
 
 #[test]
 fn compress_text_weezl() {
@@ -14,7 +14,7 @@ fn compress_text_weezl() {
     let mut my_encoder = weezl::encode::Encoder::new(weezl::BitOrder::Lsb, 7);
     my_encoder
         .into_stream(&mut compressed)
-        .encode(LOREM_IPSUM_LONG.as_bytes())
+        .encode(LOREM_IPSUM.as_bytes())
         .status
         .unwrap();
 
