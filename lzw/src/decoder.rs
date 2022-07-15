@@ -255,6 +255,10 @@ impl VariableDecoder {
                     // We assemble the string char by char.
                     while code >= clear_code {
                         stack_top -= 1;
+                        if stack_top == 0 {
+                            return Err(DecodingError::UnexpectedCode(code));
+                        }
+
                         decoding_stack[stack_top] = suffix[code as usize];
                         code = prefix[code as usize]
                     }
@@ -609,6 +613,10 @@ impl FixedDecoder {
                     // We assemble the string char by char.
                     while code >= 256 {
                         stack_top -= 1;
+                        if stack_top == 0 {
+                            return Err(DecodingError::UnexpectedCode(code));
+                        }
+
                         decoding_stack[stack_top] = suffix[code as usize];
                         code = prefix[code as usize]
                     }
@@ -745,5 +753,18 @@ mod tests {
                 2, 2, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2,
             ]
         );
+    }
+
+    #[test]
+    fn decode_bad_data_tiff() {
+        let data = [
+            0x1f, 0x40, 0x3a, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00, 0x44, 0x00, 0x60, 0x54,
+        ];
+
+        let result = TiffStyleDecoder::decode_to_vec(&data[..]).err().unwrap();
+
+        let expected = DecodingError::UnexpectedCode(258);
+
+        assert_eq!(expected.to_string(), result.to_string());
     }
 }
