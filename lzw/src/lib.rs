@@ -51,6 +51,7 @@
 pub mod decoder;
 pub mod encoder;
 mod io;
+pub mod reader;
 
 /// The bit ordering when encoding or decoding LZW.
 ///

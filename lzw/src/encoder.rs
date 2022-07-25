@@ -72,7 +72,7 @@ pub(crate) struct Tree {
 }
 
 impl Tree {
-    fn new(code_size: u8, with_clear_code: bool) -> Self {
+    pub(crate) fn new(code_size: u8, with_clear_code: bool) -> Self {
         const MAX_ENTRY_COUNT: usize = 4097;
         let nodes = Vec::with_capacity(MAX_ENTRY_COUNT);
         let code_count = 1 << code_size;
@@ -85,7 +85,7 @@ impl Tree {
     }
 
     #[inline(always)]
-    fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.nodes.clear();
         if self.with_clear_code {
             self.nodes.resize((1 << self.code_size) + 2, Node::NoChild);
@@ -95,7 +95,7 @@ impl Tree {
     }
 
     #[inline(always)]
-    fn find_word(&self, prefix_index: u16, next_char: u8) -> Option<u16> {
+    pub(crate) fn find_word(&self, prefix_index: u16, next_char: u8) -> Option<u16> {
         let prefix = &self.nodes[prefix_index as usize];
         match prefix {
             Node::NoChild => None,
@@ -118,7 +118,7 @@ impl Tree {
     }
 
     #[inline(always)]
-    fn add(&mut self, prefix_index: u16, k: u8) -> u16 {
+    pub(crate) fn add(&mut self, prefix_index: u16, k: u8) -> u16 {
         let new_index = self.nodes.len() as u16;
         let prefix_index = prefix_index as usize;
 
@@ -143,7 +143,7 @@ impl Tree {
     }
 
     #[inline(always)]
-    fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.nodes.len()
     }
 }
@@ -814,7 +814,7 @@ mod tests {
 
     #[test]
     fn encode_few_bytes_fix() -> Result<(), EncodingError> {
-        let data = [0, 0, 1, 3];
+        let data = [0, 7, 1, 3, 5, 1];
 
         let compressed = FixedEncoder::encode_to_vec(&data[..], Endianness::LittleEndian)?;
 
