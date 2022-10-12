@@ -12,7 +12,7 @@ categories = ["compression"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dev-dependencies]
-criterion = { version = "0.3", features = ["html_reports"] }
+criterion = { version = "0.4", features = ["html_reports"] }
 lzw = "0.10"
 weezl = "0.1"
 png = "0.17"
